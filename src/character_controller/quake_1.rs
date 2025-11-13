@@ -55,7 +55,7 @@ fn run_kcc(
         },
     ));
     for (velocity, input) in scratch.drain(..) {
-        let velocity: Vec3 = match world.run_system_cached_with(air_move, (velocity, input)) {
+        let velocity: Vec3 = match world.run_system_cached_with(player_move, (velocity, input)) {
             Ok(state) => state,
             Err(err) => {
                 error!("Error running air_move system: {}", err);
@@ -80,7 +80,11 @@ struct Ctx {
     dt: f32,
 }
 
-fn air_move(In((mut velocity, ctx)): In<(Vec3, Ctx)>) -> Result<Vec3> {
+fn player_move(In((mut velocity, ctx)): In<(Vec3, Ctx)>) -> Vec3 {
+    velocity
+}
+
+fn air_move(mut velocity: Vec3, ctx: Ctx) -> Vec3 {
     let movement = ctx.input.last_movement.unwrap_or_default();
     let cfg_speed = ctx.cfg.speed.normalize_or_zero();
     let mut wish_vel =
@@ -101,7 +105,7 @@ fn air_move(In((mut velocity, ctx)): In<(Vec3, Ctx)>) -> Result<Vec3> {
         velocity.z -= ctx.cfg.gravity * ctx.dt;
         fly_move()
     }
-    Ok(velocity)
+    velocity
 }
 
 fn accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: Ctx) -> Vec3 {
@@ -139,10 +143,13 @@ fn friction(velocity: Vec3, ctx: Ctx) -> Vec3 {
     let mut friction_hz = ctx.cfg.friction_hz;
     // if the leading edge is over a dropoff, increase friction
     if ctx.state.grounded.is_some() {
-        let mut start = ctx.origin + velocity / speed * 0.4;
-        start.z = ctx.origin.z + ctx.aabb.min.z;
+        // speed cannot be zero, we early return in that case already
+        let dir = velocity / speed;
+        let mut start = ctx.origin + dir * 0.4;
+        // min is negative, so this goes *down*
+        start.y = ctx.origin.y + ctx.aabb.min.y;
         let mut stop = start;
-        stop.z = start.z - 0.85;
+        stop.y = start.y - 0.85;
 
         /*
         let trace = todo!();
@@ -160,4 +167,27 @@ fn friction(velocity: Vec3, ctx: Ctx) -> Vec3 {
     };
     let new_speed = f32::max(speed - drop, 0.0);
     velocity / speed * new_speed
+}
+
+fn clip_velocity(velocity: Vec3, normal: Vec3, overbounce: f32) -> Vec3 {
+    let backoff = velocity.dot(normal) * overbounce;
+    let change = normal * backoff;
+    let mut new_velocity = velocity - change;
+    const STOP_EPSILON: f32 = 0.0025;
+    for i in 0..3 {
+        if new_velocity[i].abs() < STOP_EPSILON {
+            new_velocity[i] = 0.0;
+        }
+    }
+    new_velocity
+}
+
+fn fly_move(mut velocity: Vec3, ctx: Ctx) {
+    let mut time_left = ctx.dt;
+    const NUM_BUMPS: usize = 4;
+    let original_velocity = velocity;
+
+    for _ in 0..NUM_BUMPS {
+        let end = ctx.origin + time_left * velocity;
+    }
 }
