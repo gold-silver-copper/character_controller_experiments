@@ -1,10 +1,9 @@
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
-    app.init_resource::<DidFixedUpdateHappen>();
-
-    app.add_systems(PreUpdate, reset_did_fixed_update_happen);
-    app.add_systems(FixedFirst, set_did_fixed_update_happen);
+    app.init_resource::<DidFixedUpdateHappen>()
+        .add_systems(PreUpdate, reset_did_fixed_update_happen)
+        .add_systems(FixedFirst, set_did_fixed_update_happen);
 }
 
 fn reset_did_fixed_update_happen(mut did_fixed_update_happen: ResMut<DidFixedUpdateHappen>) {

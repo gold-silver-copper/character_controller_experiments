@@ -1,0 +1,51 @@
+use bevy::prelude::*;
+use bevy_enhanced_input::prelude::*;
+
+use crate::character_controller::fixed_update_util::did_fixed_update_happen;
+
+pub(super) fn plugin(app: &mut App) {
+    app.add_observer(apply_movement)
+        .add_observer(apply_jump)
+        .add_systems(
+            Update,
+            clear_accumulated_input.run_if(did_fixed_update_happen),
+        );
+}
+
+#[derive(Debug, InputAction)]
+#[action_output(Vec2)]
+pub(crate) struct Movement;
+
+#[derive(Debug, InputAction)]
+#[action_output(bool)]
+pub(crate) struct Jump;
+
+#[derive(Component, Reflect, Default, Debug)]
+#[reflect(Component)]
+pub(crate) struct AccumulatedInput {
+    // The last non-zero move that was input since the last fixed update
+    last_movement: Option<Vec2>,
+    // Whether any frame since the last fixed update input contained a jump
+    jumped: bool,
+}
+
+fn apply_movement(
+    movement: On<Fire<Movement>>,
+    mut accumulated_inputs: Query<&mut AccumulatedInput>,
+) {
+    if let Ok(mut accumulated_inputs) = accumulated_inputs.get_mut(movement.context) {
+        accumulated_inputs.last_movement = Some(movement.value);
+    }
+}
+
+fn apply_jump(jump: On<Fire<Jump>>, mut accumulated_inputs: Query<&mut AccumulatedInput>) {
+    if let Ok(mut accumulated_inputs) = accumulated_inputs.get_mut(jump.context) {
+        accumulated_inputs.jumped = true;
+    }
+}
+
+fn clear_accumulated_input(mut accumulated_inputs: Query<&mut AccumulatedInput>) {
+    for mut accumulated_input in &mut accumulated_inputs {
+        *accumulated_input = default();
+    }
+}

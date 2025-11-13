@@ -8,9 +8,10 @@ use bevy_enhanced_input::prelude::*;
 use bevy_trenchbroom::prelude::*;
 use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
+use crate::{character_controller::CharacterController, user_input::PlayerInput};
+
 mod character_controller;
-mod fixed_update_util;
-mod input;
+mod user_input;
 
 fn main() -> AppExit {
     App::new()
@@ -24,11 +25,7 @@ fn main() -> AppExit {
             TrenchBroomPlugins(TrenchBroomConfig::new("character_controller_experiment")),
             TrenchBroomPhysicsPlugin::new(AvianPhysicsBackend),
         ))
-        .add_plugins((
-            fixed_update_util::plugin,
-            input::plugin,
-            character_controller::plugin,
-        ))
+        .add_plugins((user_input::plugin, character_controller::plugin))
         .add_systems(Startup, setup)
         .run()
 }
@@ -43,9 +40,13 @@ struct Player;
 
 impl Player {
     fn on_add(mut world: DeferredWorld, ctx: HookContext) {
-        world
-            .commands()
-            .entity(ctx.entity)
-            .insert((Camera3d::default(),));
+        if world.is_scene_world() {
+            return;
+        }
+        world.commands().entity(ctx.entity).insert((
+            Camera3d::default(),
+            PlayerInput,
+            CharacterController,
+        ));
     }
 }

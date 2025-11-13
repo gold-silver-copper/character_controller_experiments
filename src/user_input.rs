@@ -4,16 +4,15 @@ use bevy::{
 };
 use bevy_enhanced_input::prelude::*;
 
-use crate::Player;
+use crate::character_controller::{Jump, Movement};
 
 pub(super) fn plugin(app: &mut App) {
-    app.register_required_components::<Player, PlayerInput>()
-        .add_input_context::<PlayerInput>();
+    app.add_input_context::<PlayerInput>();
 }
 
 #[derive(Component, Default)]
 #[component(on_add = PlayerInput::on_add)]
-struct PlayerInput;
+pub(crate) struct PlayerInput;
 
 impl PlayerInput {
     fn on_add(mut world: DeferredWorld, ctx: HookContext) {
@@ -37,11 +36,3 @@ impl PlayerInput {
         ));
     }
 }
-
-#[derive(Debug, InputAction)]
-#[action_output(Vec2)]
-pub(crate) struct Movement;
-
-#[derive(Debug, InputAction)]
-#[action_output(bool)]
-pub(crate) struct Jump;
