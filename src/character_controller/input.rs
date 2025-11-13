@@ -20,13 +20,14 @@ pub(crate) struct Movement;
 #[action_output(bool)]
 pub(crate) struct Jump;
 
-#[derive(Component, Reflect, Default, Debug)]
+/// Input accumulated since the last fixed update loop. Is cleared after every fixed update loop.
+#[derive(Component, Clone, Copy, Reflect, Default, Debug)]
 #[reflect(Component)]
 pub(crate) struct AccumulatedInput {
-    // The last non-zero move that was input since the last fixed update
-    last_movement: Option<Vec2>,
-    // Whether any frame since the last fixed update input contained a jump
-    jumped: bool,
+    // The last non-zero move that was input since the last fixed update loop
+    pub(crate) last_movement: Option<Vec2>,
+    // Whether any frame since the last fixed update loop input a jump
+    pub(crate) jumped: bool,
 }
 
 fn apply_movement(

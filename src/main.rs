@@ -46,7 +46,7 @@ impl Player {
         world.commands().entity(ctx.entity).insert((
             Camera3d::default(),
             PlayerInput,
-            CharacterController,
+            CharacterController::default(),
         ));
     }
 }

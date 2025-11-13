@@ -1,4 +1,4 @@
-use avian3d::prelude::PhysicsSystems;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 mod fixed_update_util;
@@ -15,10 +15,31 @@ pub(super) fn plugin(app: &mut App) {
         );
 }
 
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Clone, Copy, Reflect, Debug)]
 #[reflect(Component)]
-#[require(AccumulatedInput)]
-pub(crate) struct CharacterController;
+#[require(AccumulatedInput, CharacterControllerState, RigidBody = RigidBody::Kinematic)]
+pub(crate) struct CharacterController {
+    pub(crate) speed: Vec2,
+    pub(crate) max_speed: f32,
+    pub(crate) gravity: f32,
+}
+
+impl Default for CharacterController {
+    fn default() -> Self {
+        Self {
+            speed: vec2(10., 8.),
+            max_speed: 20.0,
+            gravity: 9.81,
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy, Reflect, Default, Debug)]
+#[reflect(Component)]
+pub(crate) struct CharacterControllerState {
+    pub(crate) grounded: Option<Entity>,
+    pub(crate) velocity: Vec3,
+}
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CharacterControllerSystems {
