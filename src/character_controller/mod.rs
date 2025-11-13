@@ -24,6 +24,8 @@ pub(crate) struct CharacterController {
     pub(crate) acceleration: f32,
     pub(crate) max_speed: f32,
     pub(crate) gravity: f32,
+    pub(crate) friction_hz: f32,
+    pub(crate) stop_speed: f32,
 }
 
 impl Default for CharacterController {
@@ -34,6 +36,8 @@ impl Default for CharacterController {
             acceleration: 0.25,
             max_speed: 8.0,
             gravity: 20.,
+            friction_hz: 4.0,
+            stop_speed: 2.5,
         }
     }
 }
