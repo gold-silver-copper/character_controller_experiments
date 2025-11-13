@@ -25,7 +25,6 @@ fn run_kcc(
         QueryState<(
             Entity,
             &CharacterController,
-            &CharacterControllerState,
             &AccumulatedInput,
             &LinearVelocity,
             &GlobalTransform,
@@ -37,26 +36,26 @@ fn run_kcc(
     mut transform_helper: Local<SystemState<TransformHelper>>,
 ) {
     let dt = world.resource::<Time>().delta_secs();
-    scratch.extend(kccs.iter(world).map(
-        |(entity, cfg, state, input, vel, transform, collider, aabb)| {
-            (
-                transform.compute_transform(),
-                vel.0,
-                Ctx {
-                    entity,
-                    cfg: cfg.clone(),
-                    state: *state,
-                    input: *input,
-                    dt,
-                    aabb: *aabb,
-                    collider: collider.clone(),
-                },
-            )
-        },
-    ));
+    scratch.extend(
+        kccs.iter(world)
+            .map(|(entity, cfg, input, vel, transform, collider, aabb)| {
+                (
+                    transform.compute_transform(),
+                    vel.0,
+                    Ctx {
+                        entity,
+                        cfg: cfg.clone(),
+                        input: *input,
+                        dt,
+                        aabb: *aabb,
+                        collider: collider.clone(),
+                    },
+                )
+            }),
+    );
     for (transform, velocity, ctx) in scratch.drain(..) {
         let entity = ctx.entity;
-        let (transform, velocity): (Transform, Vec3) =
+        let (transform, velocity, grounded): (Transform, Vec3, Option<Entity>) =
             match world.run_system_cached_with(player_move, (transform, velocity, ctx)) {
                 Ok(val) => val,
                 Err(err) => {
@@ -75,6 +74,11 @@ fn run_kcc(
             .entity_mut(entity)
             .get_mut::<LinearVelocity>()
             .unwrap() = velocity;
+        world
+            .entity_mut(entity)
+            .get_mut::<CharacterControllerState>()
+            .unwrap()
+            .grounded = grounded;
         *world.entity_mut(entity).get_mut::<Transform>().unwrap() = transform;
         *world
             .entity_mut(entity)
@@ -87,7 +91,6 @@ fn run_kcc(
 struct Ctx {
     entity: Entity,
     cfg: CharacterController,
-    state: CharacterControllerState,
     input: AccumulatedInput,
     aabb: ColliderAabb,
     collider: Collider,
@@ -105,22 +108,24 @@ fn player_move(
 
     // VectorCopy (pmove.cmd.angles, pmove.angles);
 
-    (transform, grounded) = categorize_position(transform, velocity, &ctx, s & patial);
+    let mut grounded: Option<Entity>;
+    (transform, grounded) = categorize_position(transform, velocity, &ctx, &spatial);
 
     // jumpbutton()
 
-    velocity = friction(transform, velocity, &ctx, &spatial);
-    (transform, velocity) = air_move(transform, velocity, &spatial, &ctx);
+    velocity = friction(transform, velocity, grounded, &ctx, &spatial);
+    (transform, velocity) = air_move(transform, velocity, grounded, &spatial, &ctx);
 
     (transform, grounded) = categorize_position(transform, velocity, &ctx, &spatial);
 
-    (transform, velocity)
+    (transform, velocity, grounded)
 }
 
 #[must_use]
 fn air_move(
     mut transform: Transform,
     mut velocity: Vec3,
+    grounded: Option<Entity>,
     spatial: &SpatialQueryPipeline,
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
@@ -134,7 +139,7 @@ fn air_move(
         wish_speed = ctx.cfg.max_speed;
     }
 
-    if ctx.state.grounded.is_some() {
+    if grounded.is_some() {
         velocity.y = 0.0;
         velocity = accelerate(wish_dir, wish_speed, velocity, ctx);
         velocity.y -= ctx.cfg.gravity * ctx.dt;
@@ -368,6 +373,7 @@ fn air_accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) ->
 fn friction(
     transform: Transform,
     velocity: Vec3,
+    grounded: Option<Entity>,
     ctx: &Ctx,
     spatial: &SpatialQueryPipeline,
 ) -> Vec3 {
@@ -378,7 +384,7 @@ fn friction(
 
     let mut friction_hz = ctx.cfg.friction_hz;
     // if the leading edge is over a dropoff, increase friction
-    if ctx.state.grounded.is_some() {
+    if grounded.is_some() {
         // speed cannot be zero, we early return in that case already
         let vel_dir = velocity / speed;
         let mut start = transform.translation + vel_dir * 0.4;
@@ -398,7 +404,7 @@ fn friction(
             friction_hz *= 2.0;
         }
     }
-    let drop = if ctx.state.grounded.is_some() {
+    let drop = if grounded.is_some() {
         let stop_speed = f32::max(speed, ctx.cfg.stop_speed);
         stop_speed * friction_hz * ctx.dt
     } else {
