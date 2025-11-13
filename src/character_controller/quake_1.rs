@@ -133,99 +133,103 @@ fn air_move(
     }
 
     if ctx.state.grounded.is_some() {
-        velocity.z = 0.0;
+        velocity.y = 0.0;
         velocity = accelerate(wish_dir, wish_speed, velocity, ctx);
-        velocity.z -= ctx.cfg.gravity * ctx.dt;
-        ground_move();
+        velocity.y -= ctx.cfg.gravity * ctx.dt;
+        (transform, velocity) = ground_move(transform, velocity, ctx, spatial);
     } else {
         velocity = air_accelerate(wish_dir, wish_speed, velocity, ctx);
-        velocity.z -= ctx.cfg.gravity * ctx.dt;
+        velocity.y -= ctx.cfg.gravity * ctx.dt;
         (transform, velocity) = fly_move(transform, velocity, ctx, spatial);
     }
     (transform, velocity)
 }
 
 #[must_use]
-fn accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
-    let current_speed = velocity.dot(wish_dir.into());
-    // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
-    // our current velocity, making `add_speed` large.
-    let add_speed = wish_speed - current_speed;
-    if add_speed <= 0.0 {
-        return velocity;
-    }
-
-    let accel_speed = f32::min(ctx.cfg.acceleration * ctx.dt * wish_speed, add_speed);
-    velocity + accel_speed * wish_dir
-}
-
-#[must_use]
-fn air_accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
-    let wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
-    accelerate(wish_dir, wish_speed, velocity, ctx)
-}
-
-#[must_use]
-fn ground_move() {
-    todo!();
-}
-
-#[must_use]
-fn friction(
-    transform: Transform,
-    velocity: Vec3,
+fn ground_move(
+    mut transform: Transform,
+    mut velocity: Vec3,
     ctx: &Ctx,
     spatial: &SpatialQueryPipeline,
-) -> Vec3 {
-    let speed = velocity.length();
-    if speed < 0.025 {
-        return Vec3::ZERO;
+) -> (Transform, Vec3) {
+    velocity.y = 0.0;
+    if velocity == Vec3::ZERO {
+        return (transform, velocity);
     }
-
-    let mut friction_hz = ctx.cfg.friction_hz;
-    // if the leading edge is over a dropoff, increase friction
-    if ctx.state.grounded.is_some() {
-        // speed cannot be zero, we early return in that case already
-        let vel_dir = velocity / speed;
-        let mut start = transform.translation + vel_dir * 0.4;
-        // min is negative, so this goes *down*
-        start.y = transform.translation.y + ctx.aabb.min.y;
-        let cast_dir = Dir3::NEG_Y;
-
-        let trace = spatial.cast_shape(
-            &ctx.collider,
-            start,
-            transform.rotation,
-            cast_dir,
-            &ShapeCastConfig::from_max_distance(0.85),
-            &ctx.cfg.filter,
-        );
-        if trace.is_none() {
-            friction_hz *= 2.0;
-        }
-    }
-    let drop = if ctx.state.grounded.is_some() {
-        let stop_speed = f32::max(speed, ctx.cfg.stop_speed);
-        stop_speed * friction_hz * ctx.dt
-    } else {
-        0.0
+    // first try just moving to the destination
+    let Ok((cast_dir, cast_len)) = Dir3::new_and_length(velocity * ctx.dt) else {
+        return (transform, velocity);
     };
-    let new_speed = f32::max(speed - drop, 0.0);
-    velocity / speed * new_speed
-}
 
-#[must_use]
-fn clip_velocity(velocity: Vec3, normal: Vec3, overbounce: f32) -> Vec3 {
-    let backoff = velocity.dot(normal) * overbounce;
-    let change = normal * backoff;
-    let mut new_velocity = velocity - change;
-    const STOP_EPSILON: f32 = 0.0025;
-    for i in 0..3 {
-        if new_velocity[i].abs() < STOP_EPSILON {
-            new_velocity[i] = 0.0;
+    // first try moving directly to the next spot
+    let trace = spatial.cast_shape(
+        &ctx.collider,
+        transform.translation,
+        transform.rotation,
+        cast_dir,
+        &ShapeCastConfig::from_max_distance(cast_len),
+        &ctx.cfg.filter,
+    );
+    if trace.is_none() {
+        transform.translation += cast_dir * cast_len;
+        return (transform, velocity);
+    };
+
+    // try sliding forward both on ground and up 16 inches
+    // take the move that goes farthest
+
+    let original = transform.translation;
+
+    // resolve collisions
+    let (down, down_velocity) = fly_move(transform, velocity, ctx, spatial);
+
+    // move up a stair height
+    let cast_len = 0.5;
+    let cast_dir = Dir3::Y;
+    let trace = spatial.cast_shape(
+        &ctx.collider,
+        transform.translation,
+        transform.rotation,
+        cast_dir,
+        &ShapeCastConfig::from_max_distance(cast_len),
+        &ctx.cfg.filter,
+    );
+    if let Some(trace) = trace {
+        // Treat slopes above a certain angle as falling. This is where surf mechanics come from!!
+        if trace.normal1.y > ctx.cfg.max_slope_cosine {
+            return (down, down_velocity);
         }
+        transform.translation += cast_dir * trace.distance;
     }
-    new_velocity
+
+    (transform, velocity) = fly_move(transform, velocity, ctx, spatial);
+
+    // press down the stepheight
+    let cast_dir = Dir3::NEG_Y;
+    let trace = spatial.cast_shape(
+        &ctx.collider,
+        transform.translation,
+        transform.rotation,
+        cast_dir,
+        &ShapeCastConfig::from_max_distance(cast_len),
+        &ctx.cfg.filter,
+    );
+    if let Some(trace) = trace {
+        transform.translation += cast_dir * trace.distance;
+    }
+
+    let up = transform.translation;
+    // decide which one went farther
+    let down_dist = down.translation.xz().distance_squared(original.xz());
+    let up_dist = up.xz().distance_squared(original.xz());
+
+    if down_dist > up_dist {
+        (down, down_velocity)
+    } else {
+        // copy z value from slide move
+        velocity.y = down_velocity.y;
+        (transform, velocity)
+    }
 }
 
 #[must_use]
@@ -312,4 +316,82 @@ fn fly_move(
         }
     }
     (transform, velocity)
+}
+
+#[must_use]
+fn clip_velocity(velocity: Vec3, normal: Vec3, overbounce: f32) -> Vec3 {
+    let backoff = velocity.dot(normal) * overbounce;
+    let change = normal * backoff;
+    let mut new_velocity = velocity - change;
+    const STOP_EPSILON: f32 = 0.0025;
+    for i in 0..3 {
+        if new_velocity[i].abs() < STOP_EPSILON {
+            new_velocity[i] = 0.0;
+        }
+    }
+    new_velocity
+}
+
+#[must_use]
+fn accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
+    let current_speed = velocity.dot(wish_dir.into());
+    // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
+    // our current velocity, making `add_speed` large.
+    let add_speed = wish_speed - current_speed;
+    if add_speed <= 0.0 {
+        return velocity;
+    }
+
+    let accel_speed = f32::min(ctx.cfg.acceleration * ctx.dt * wish_speed, add_speed);
+    velocity + accel_speed * wish_dir
+}
+
+#[must_use]
+fn air_accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
+    let wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
+    accelerate(wish_dir, wish_speed, velocity, ctx)
+}
+
+#[must_use]
+fn friction(
+    transform: Transform,
+    velocity: Vec3,
+    ctx: &Ctx,
+    spatial: &SpatialQueryPipeline,
+) -> Vec3 {
+    let speed = velocity.length();
+    if speed < 0.025 {
+        return Vec3::ZERO;
+    }
+
+    let mut friction_hz = ctx.cfg.friction_hz;
+    // if the leading edge is over a dropoff, increase friction
+    if ctx.state.grounded.is_some() {
+        // speed cannot be zero, we early return in that case already
+        let vel_dir = velocity / speed;
+        let mut start = transform.translation + vel_dir * 0.4;
+        // min is negative, so this goes *down*
+        start.y = transform.translation.y + ctx.aabb.min.y;
+        let cast_dir = Dir3::NEG_Y;
+
+        let trace = spatial.cast_shape(
+            &ctx.collider,
+            start,
+            transform.rotation,
+            cast_dir,
+            &ShapeCastConfig::from_max_distance(0.85),
+            &ctx.cfg.filter,
+        );
+        if trace.is_none() {
+            friction_hz *= 2.0;
+        }
+    }
+    let drop = if ctx.state.grounded.is_some() {
+        let stop_speed = f32::max(speed, ctx.cfg.stop_speed);
+        stop_speed * friction_hz * ctx.dt
+    } else {
+        0.0
+    };
+    let new_speed = f32::max(speed - drop, 0.0);
+    velocity / speed * new_speed
 }

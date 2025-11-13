@@ -37,6 +37,7 @@ pub(crate) struct CharacterController {
     pub(crate) gravity: f32,
     pub(crate) friction_hz: f32,
     pub(crate) stop_speed: f32,
+    pub(crate) max_slope_cosine: f32,
     pub(crate) filter: SpatialQueryFilter,
 }
 
@@ -50,6 +51,8 @@ impl Default for CharacterController {
             gravity: 20.,
             friction_hz: 4.0,
             stop_speed: 2.5,
+            // 45.57 degrees
+            max_slope_cosine: 0.7,
             filter: SpatialQueryFilter::default(),
         }
     }
