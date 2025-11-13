@@ -180,7 +180,7 @@ fn ground_move(
 
     let original = transform.translation;
 
-    // resolve collisions
+    // this is how much we move if we stay on the ground
     let (down, down_velocity) = fly_move(transform, velocity, ctx, spatial);
 
     // move up a stair height
@@ -195,16 +195,15 @@ fn ground_move(
         &ctx.cfg.filter,
     );
     if let Some(trace) = trace {
-        // Treat slopes above a certain angle as falling. This is where surf mechanics come from!!
-        if trace.normal1.y > ctx.cfg.max_slope_cosine {
-            return (down, down_velocity);
-        }
         transform.translation += cast_dir * trace.distance;
+    } else {
+        transform.translation += cast_dir * cast_len;
     }
 
+    // move after going up some height
     (transform, velocity) = fly_move(transform, velocity, ctx, spatial);
 
-    // press down the stepheight
+    // press down the step height
     let cast_dir = Dir3::NEG_Y;
     let trace = spatial.cast_shape(
         &ctx.collider,
@@ -215,11 +214,22 @@ fn ground_move(
         &ctx.cfg.filter,
     );
     if let Some(trace) = trace {
+        // Treat slopes above a certain angle as falling. This is where surf mechanics come from!!
+        if trace.normal1.y > ctx.cfg.max_slope_cosine {
+            return (down, down_velocity);
+        }
         transform.translation += cast_dir * trace.distance;
+    } else {
+        transform.translation += cast_dir * cast_len;
     }
 
     let up = transform.translation;
     // decide which one went farther
+    // down: what if we moved on the ground?
+    // up: what if we
+    // - teleported a bit up to not bump into stairs
+    // - moved
+    // - then teleported back down onto the ground?
     let down_dist = down.translation.xz().distance_squared(original.xz());
     let up_dist = up.xz().distance_squared(original.xz());
 
