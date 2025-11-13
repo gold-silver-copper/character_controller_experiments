@@ -1,9 +1,15 @@
 use avian3d::prelude::*;
-use bevy::prelude::*;
+use bevy::{
+    ecs::{
+        lifecycle::HookContext, relationship::RelationshipSourceCollection, world::DeferredWorld,
+    },
+    prelude::*,
+};
 
 mod fixed_update_util;
 mod input;
 mod quake_1;
+mod readonly_spatial_query;
 
 pub(crate) use input::{AccumulatedInput, Jump, Movement};
 
@@ -15,9 +21,15 @@ pub(super) fn plugin(app: &mut App) {
         );
 }
 
-#[derive(Component, Clone, Copy, Reflect, Debug)]
+#[derive(Component, Clone, Reflect, Debug)]
 #[reflect(Component)]
-#[require(AccumulatedInput, CharacterControllerState, RigidBody = RigidBody::Kinematic)]
+#[require(
+    AccumulatedInput,
+    CharacterControllerState,
+    RigidBody = RigidBody::Kinematic,
+    Collider = panic!("CharacterController requires a root Collider") as Collider
+)]
+#[component(on_add=CharacterController::on_add)]
 pub(crate) struct CharacterController {
     pub(crate) speed: Vec2,
     pub(crate) air_speed: f32,
@@ -26,6 +38,7 @@ pub(crate) struct CharacterController {
     pub(crate) gravity: f32,
     pub(crate) friction_hz: f32,
     pub(crate) stop_speed: f32,
+    pub(crate) filter: SpatialQueryFilter,
 }
 
 impl Default for CharacterController {
@@ -38,7 +51,17 @@ impl Default for CharacterController {
             gravity: 20.,
             friction_hz: 4.0,
             stop_speed: 2.5,
+            filter: SpatialQueryFilter::default(),
         }
+    }
+}
+
+impl CharacterController {
+    pub fn on_add(mut world: DeferredWorld, ctx: HookContext) {
+        let Some(mut kcc) = world.get_mut::<Self>(ctx.entity) else {
+            return;
+        };
+        kcc.filter.excluded_entities.add(ctx.entity);
     }
 }
 
