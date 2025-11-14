@@ -96,11 +96,7 @@ fn player_move(
     In((mut transform, mut velocity, ctx)): In<(Transform, Vec3, Ctx)>,
     spatial: Res<SpatialQueryPipeline>,
 ) -> (Transform, Vec3, Option<Entity>) {
-    // AngleVectors
-
-    // NudgePositions
-
-    // VectorCopy (pmove.cmd.angles, pmove.angles);
+    transform = nudge_position(transform, &spatial, &ctx);
 
     let mut grounded: Option<Entity>;
     (transform, grounded) = categorize_position(transform, velocity, &ctx, &spatial);
@@ -441,4 +437,38 @@ fn categorize_position(
     let grounded = trace.entity;
 
     (transform, Some(grounded))
+}
+
+#[must_use]
+fn nudge_position(
+    mut transform: Transform,
+    spatial: &SpatialQueryPipeline,
+    ctx: &Ctx,
+) -> Transform {
+    const SIGN: [f32; 3] = [0.0, -1.0, 1.0];
+    let base = transform;
+    for z in 0..3 {
+        for x in 0..3 {
+            for y in 0..3 {
+                let offset = Vec3::new(SIGN[x], SIGN[y], SIGN[z]) * 0.025 / 8.0;
+                transform.translation = base.translation + offset;
+                let mut free = true;
+                spatial.shape_intersections_callback(
+                    &ctx.collider,
+                    transform.translation,
+                    transform.rotation,
+                    &ctx.cfg.filter,
+                    |_| {
+                        free = false;
+                        // stop search
+                        false
+                    },
+                );
+                if !free {
+                    return transform;
+                }
+            }
+        }
+    }
+    base
 }
