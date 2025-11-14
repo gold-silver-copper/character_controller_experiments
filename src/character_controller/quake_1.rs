@@ -174,14 +174,7 @@ fn ground_move(
     };
 
     // first try moving directly to the next spot
-    let trace = spatial.cast_shape(
-        &ctx.collider,
-        transform.translation,
-        transform.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_len),
-        &ctx.cfg.filter,
-    );
+    let trace = sweep_check(transform, cast_dir, cast_len, spatial, ctx);
     if trace.is_none() {
         transform.translation += cast_dir * cast_len;
         return (transform, velocity);
@@ -198,14 +191,7 @@ fn ground_move(
     // move up a stair height
     let cast_len = ctx.cfg.step_height;
     let cast_dir = Dir3::Y;
-    let trace = spatial.cast_shape(
-        &ctx.collider,
-        transform.translation,
-        transform.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_len),
-        &ctx.cfg.filter,
-    );
+    let trace = sweep_check(transform, cast_dir, cast_len, spatial, ctx);
     if let Some(trace) = trace {
         transform.translation += cast_dir * (trace.distance - ctx.cfg.skin_width);
     } else {
@@ -217,14 +203,7 @@ fn ground_move(
 
     // press down the step height
     let cast_dir = Dir3::NEG_Y;
-    let trace = spatial.cast_shape(
-        &ctx.collider,
-        transform.translation,
-        transform.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_len),
-        &ctx.cfg.filter,
-    );
+    let trace = sweep_check(transform, cast_dir, cast_len, spatial, ctx);
     if let Some(trace) = trace {
         // Treat slopes above a certain angle as falling. This is where surf mechanics come from!!
         if trace.normal1.y < ctx.cfg.max_slope_cosine {
@@ -272,14 +251,7 @@ fn fly_move(
         let Ok((cast_dir, cast_len)) = Dir3::new_and_length(time_left * velocity) else {
             break;
         };
-        let trace = spatial.cast_shape(
-            &ctx.collider,
-            transform.translation,
-            transform.rotation,
-            cast_dir,
-            &ShapeCastConfig::from_max_distance(cast_len),
-            &ctx.cfg.filter,
-        );
+        let trace = sweep_check(transform, cast_dir, cast_len, spatial, ctx);
         let Some(trace) = trace else {
             transform.translation += cast_dir * cast_len;
             // moved the entire distance
@@ -400,19 +372,13 @@ fn friction(
     if grounded.is_some() {
         // speed cannot be zero, we early return in that case already
         let vel_dir = velocity / speed;
-        let mut start = transform.translation + vel_dir * 0.4;
+        let mut start = transform;
+        start.translation += vel_dir * 0.4;
         // min is negative, so this goes *down*
-        start.y = transform.translation.y + ctx.aabb.min.y;
+        start.translation.y = transform.translation.y + ctx.aabb.min.y;
         let cast_dir = Dir3::NEG_Y;
 
-        let trace = spatial.cast_shape(
-            &ctx.collider,
-            start,
-            transform.rotation,
-            cast_dir,
-            &ShapeCastConfig::from_max_distance(0.85),
-            &ctx.cfg.filter,
-        );
+        let trace = sweep_check(start, cast_dir, 0.85, spatial, ctx);
         if trace.is_none() {
             friction_hz *= 2.0;
         }
@@ -439,14 +405,7 @@ fn categorize_position(
     }
     let cast_len = 0.025;
     let cast_dir = Dir3::NEG_Y;
-    let trace = spatial.cast_shape(
-        &ctx.collider,
-        transform.translation,
-        transform.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_len),
-        &ctx.cfg.filter,
-    );
+    let trace = sweep_check(transform, cast_dir, cast_len, spatial, ctx);
     let Some(trace) = trace else {
         return (transform, None);
     };
@@ -491,4 +450,34 @@ fn nudge_position(
         }
     }
     base
+}
+
+/// Returns the safe hit distance and the hit data from the spatial query.
+/// Source: https://github.com/Ploruto/kcc_prototyping/blob/main/src/move_and_slide.rs#L42
+#[must_use]
+fn sweep_check(
+    transform: Transform,
+    direction: Dir3,
+    max_distance: f32,
+    spatial: &SpatialQueryPipeline,
+    ctx: &Ctx,
+) -> Option<ShapeHitData> {
+    let mut hit = spatial.cast_shape(
+        &ctx.collider,
+        transform.translation,
+        transform.rotation,
+        direction,
+        &ShapeCastConfig {
+            max_distance: max_distance + ctx.cfg.skin_width, // extend the trace slightly
+            target_distance: ctx.cfg.skin_width, // I'm not sure what this does but I think this is correct ;)
+            ignore_origin_penetration: true,
+            ..default()
+        },
+        &ctx.cfg.filter,
+    )?;
+
+    // How far is safe to translate by
+    let safe_distance = hit.distance - ctx.cfg.skin_width;
+    hit.distance = safe_distance;
+    Some(hit)
 }
