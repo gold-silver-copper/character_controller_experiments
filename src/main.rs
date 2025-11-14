@@ -10,6 +10,7 @@ use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
 use crate::{character_controller::CharacterController, user_input::PlayerInput};
 
+mod camera;
 mod character_controller;
 mod user_input;
 
@@ -32,13 +33,18 @@ fn main() -> AppExit {
             ),
             TrenchBroomPhysicsPlugin::new(AvianPhysicsBackend),
         ))
-        .add_plugins((user_input::plugin, character_controller::plugin))
+        .add_plugins((
+            user_input::plugin,
+            character_controller::plugin,
+            camera::plugin,
+        ))
         .add_systems(Startup, setup)
         .run()
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     commands.spawn(SceneRoot(assets.load("playground.map#Scene")));
+    commands.spawn(Camera3d::default());
 }
 
 #[point_class(base(Transform, Visibility))]
@@ -51,7 +57,6 @@ impl Player {
             return;
         }
         world.commands().entity(ctx.entity).insert((
-            Camera3d::default(),
             PlayerInput,
             CharacterController::default(),
             RigidBody::Kinematic,
