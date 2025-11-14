@@ -2,8 +2,8 @@ use avian3d::prelude::*;
 use bevy::{ecs::system::SystemState, prelude::*};
 
 use crate::character_controller::{
-    CharacterController, CharacterControllerState, CharacterControllerSystems,
-    input::AccumulatedInput,
+    CharacterController, CharacterControllerForward, CharacterControllerState,
+    CharacterControllerSystems, input::AccumulatedInput,
 };
 
 pub(super) fn plugin(app: &mut App) {
@@ -24,29 +24,39 @@ fn run_kcc(
             &GlobalTransform,
             &Collider,
             &ColliderAabb,
+            Option<&CharacterControllerForward>,
         )>,
     >,
+    mut transforms: Local<QueryState<&GlobalTransform>>,
     mut scratch: Local<Vec<(Transform, Vec3, Ctx)>>,
     mut transform_helper: Local<SystemState<TransformHelper>>,
 ) {
     let dt = world.resource::<Time>().delta_secs();
-    scratch.extend(
-        kccs.iter(world)
-            .map(|(entity, cfg, input, vel, transform, collider, aabb)| {
-                (
-                    transform.compute_transform(),
-                    vel.0,
-                    Ctx {
-                        entity,
-                        cfg: cfg.clone(),
-                        input: *input,
-                        dt,
-                        aabb: *aabb,
-                        collider: collider.clone(),
-                    },
-                )
-            }),
-    );
+    scratch.extend(kccs.iter(world).map(
+        |(entity, cfg, input, vel, transform, collider, aabb, forward)| {
+            let transform = transform.compute_transform();
+            (
+                transform,
+                vel.0,
+                Ctx {
+                    entity,
+                    cfg: cfg.clone(),
+                    input: *input,
+                    dt,
+                    aabb: *aabb,
+                    orientation: forward
+                        .and_then(|e| {
+                            transforms
+                                .get(world, e.0)
+                                .map(|t| t.compute_transform())
+                                .ok()
+                        })
+                        .unwrap_or(transform),
+                    collider: collider.clone(),
+                },
+            )
+        },
+    ));
     for (transform, velocity, ctx) in scratch.drain(..) {
         let entity = ctx.entity;
         let (transform, velocity, grounded): (Transform, Vec3, Option<Entity>) =
@@ -84,6 +94,7 @@ fn run_kcc(
 #[derive(Debug)]
 struct Ctx {
     entity: Entity,
+    orientation: Transform,
     cfg: CharacterController,
     input: AccumulatedInput,
     aabb: ColliderAabb,
@@ -121,8 +132,9 @@ fn air_move(
 ) -> (Transform, Vec3) {
     let movement = ctx.input.last_movement.unwrap_or_default();
     let cfg_speed = ctx.cfg.speed;
-    let mut wish_vel = cfg_speed.y * movement.y * transform.forward()
-        + cfg_speed.x * movement.x * transform.right();
+    let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
+        + cfg_speed.x * movement.x * ctx.orientation.right();
+    wish_vel.y = 0.0;
     let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
     if wish_speed > ctx.cfg.max_speed {
         wish_vel *= ctx.cfg.max_speed / wish_speed;

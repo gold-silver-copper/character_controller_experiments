@@ -93,3 +93,11 @@ pub(crate) struct CharacterControllerState {
 pub(crate) enum CharacterControllerSystems {
     ApplyMovement,
 }
+
+#[derive(Component)]
+#[relationship(relationship_target = CharacterControllerForward)]
+pub(crate) struct CharacterControllerForwardOf(pub(crate) Entity);
+
+#[derive(Component)]
+#[relationship_target(relationship = CharacterControllerForwardOf)]
+pub(crate) struct CharacterControllerForward(Entity);

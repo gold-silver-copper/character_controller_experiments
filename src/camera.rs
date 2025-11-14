@@ -23,7 +23,6 @@ fn sync_camera(
 fn rotate_camera(
     rotate: On<Fire<Rotate>>,
     mut camera: Single<&mut Transform, (With<Camera>, Without<Player>)>,
-    mut player: Single<&mut Transform, With<Player>>,
 ) {
     let (mut yaw, mut pitch, _) = camera.rotation.to_euler(EulerRot::YXZ);
 
@@ -33,7 +32,6 @@ fn rotate_camera(
     pitch = pitch.clamp(-TAU / 4.0 + 0.01, TAU / 4.0 - 0.01);
 
     camera.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, 0.0);
-    player.rotation = Quat::from_euler(EulerRot::YXZ, yaw, 0.0, 0.0);
 }
 
 fn capture_cursor(mut cursor: Single<&mut CursorOptions>) {

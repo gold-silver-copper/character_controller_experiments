@@ -2,13 +2,17 @@ use avian3d::prelude::*;
 use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     gltf::GltfPlugin,
+    log::{LogPlugin, tracing_subscriber::field::MakeExt},
     prelude::*,
 };
 use bevy_enhanced_input::prelude::*;
 use bevy_trenchbroom::prelude::*;
 use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
-use crate::{character_controller::CharacterController, user_input::PlayerInput};
+use crate::{
+    character_controller::{CharacterController, CharacterControllerForwardOf},
+    user_input::PlayerInput,
+};
 
 mod camera;
 mod character_controller;
@@ -17,10 +21,36 @@ mod user_input;
 fn main() -> AppExit {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(GltfPlugin {
-                use_model_forward_direction: true,
-                ..default()
-            }),
+            DefaultPlugins
+                .set(GltfPlugin {
+                    use_model_forward_direction: true,
+                    ..default()
+                })
+                .set(LogPlugin {
+                    filter: format!(
+                        concat!(
+                            "{default},",
+                            "symphonia_bundle_mp3::demuxer=warn,",
+                            "symphonia_format_caf::demuxer=warn,",
+                            "symphonia_format_isompf4::demuxer=warn,",
+                            "symphonia_format_mkv::demuxer=warn,",
+                            "symphonia_format_ogg::demuxer=warn,",
+                            "symphonia_format_riff::demuxer=warn,",
+                            "symphonia_format_wav::demuxer=warn,",
+                            "calloop::loop_logic=error,",
+                        ),
+                        default = bevy::log::DEFAULT_FILTER
+                    ),
+                    fmt_layer: |_| {
+                        Some(Box::new(
+                            bevy::log::tracing_subscriber::fmt::Layer::default()
+                                .without_time()
+                                .map_fmt_fields(MakeExt::debug_alt)
+                                .with_writer(std::io::stderr),
+                        ))
+                    },
+                    ..default()
+                }),
             PhysicsPlugins::default(),
             EnhancedInputPlugin,
             TrenchBroomPlugins(
@@ -62,5 +92,14 @@ impl Player {
             RigidBody::Kinematic,
             Collider::capsule(0.25, 1.3),
         ));
+        let camera = world
+            .try_query_filtered::<Entity, With<Camera3d>>()
+            .unwrap()
+            .single(&*world)
+            .unwrap();
+        world
+            .commands()
+            .entity(camera)
+            .insert(CharacterControllerForwardOf(ctx.entity));
     }
 }
