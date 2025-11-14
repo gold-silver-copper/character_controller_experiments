@@ -155,7 +155,7 @@ fn ground_move(
     }
     // first try just moving to the destination
     let mut cast_dir = velocity * ctx.dt;
-    cast_dir.z = 0.0;
+    cast_dir.y = 0.0;
 
     let Ok((cast_dir, cast_len)) = Dir3::new_and_length(cast_dir) else {
         return (transform, velocity);
@@ -253,7 +253,7 @@ fn fly_move(
     const NUM_BUMPS: usize = 4;
     const MAX_CLIP_PLANES: usize = 4;
     let original_velocity = velocity;
-    let mut num_planes: usize;
+    let mut num_planes = 0;
     let mut planes = [Vec3::ZERO; MAX_CLIP_PLANES];
 
     for _ in 0..NUM_BUMPS {
@@ -268,7 +268,6 @@ fn fly_move(
             &ShapeCastConfig::from_max_distance(cast_len),
             &ctx.cfg.filter,
         );
-        num_planes = 0;
         let Some(trace) = trace else {
             transform.translation += cast_dir * cast_len;
             // moved the entire distance
@@ -345,8 +344,6 @@ fn clip_velocity(velocity: Vec3, normal: Vec3, overbounce: f32) -> Vec3 {
 #[must_use]
 fn accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
     let current_speed = velocity.dot(wish_dir.into());
-    // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
-    // our current velocity, making `add_speed` large.
     let add_speed = wish_speed - current_speed;
     if add_speed <= 0.0 {
         return velocity;
@@ -358,8 +355,17 @@ fn accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec
 
 #[must_use]
 fn air_accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) -> Vec3 {
-    let wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
-    accelerate(wish_dir, wish_speed, velocity, ctx)
+    let current_speed = velocity.dot(wish_dir.into());
+    // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
+    // our current velocity, making `add_speed` large.
+    let air_wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
+    let add_speed = air_wish_speed - current_speed;
+    if add_speed <= 0.0 {
+        return velocity;
+    }
+
+    let accel_speed = f32::min(ctx.cfg.acceleration * ctx.dt * wish_speed, add_speed);
+    velocity + accel_speed * wish_dir
 }
 
 #[must_use]
@@ -464,7 +470,7 @@ fn nudge_position(
                         false
                     },
                 );
-                if !free {
+                if free {
                     return transform;
                 }
             }
