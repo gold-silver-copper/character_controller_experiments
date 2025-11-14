@@ -9,15 +9,10 @@ use crate::character_controller::{
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         FixedPostUpdate,
-        (run_kcc, print_input).in_set(CharacterControllerSystems::ApplyMovement),
+        run_kcc.in_set(CharacterControllerSystems::ApplyMovement),
     );
 }
 
-fn print_input(input: Query<&AccumulatedInput>) {
-    for input in input.iter() {
-        println!("Input: {:?}", input);
-    }
-}
 
 fn run_kcc(
     world: &mut World,
@@ -130,9 +125,9 @@ fn air_move(
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
     let movement = ctx.input.last_movement.unwrap_or_default();
-    let cfg_speed = ctx.cfg.speed.normalize_or_zero();
-    let mut wish_vel =
-        cfg_speed.y * movement.y * Vec3::NEG_Z + cfg_speed.x * movement.x * Vec3::NEG_X;
+    let cfg_speed = ctx.cfg.speed;
+    let mut wish_vel = cfg_speed.y * movement.y * transform.forward()
+        + cfg_speed.x * movement.x * transform.right();
     let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
     if wish_speed > ctx.cfg.max_speed {
         wish_vel *= ctx.cfg.max_speed / wish_speed;

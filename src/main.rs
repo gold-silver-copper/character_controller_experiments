@@ -22,12 +22,18 @@ fn main() -> AppExit {
             }),
             PhysicsPlugins::default(),
             EnhancedInputPlugin,
-            TrenchBroomPlugins(TrenchBroomConfig::new("character_controller_experiment")),
+            TrenchBroomPlugins(
+                TrenchBroomConfig::new("character_controller_experiment")
+                    .default_solid_spawn_hooks(|| {
+                        SpawnHooks::new()
+                            .convex_collider()
+                            .smooth_by_default_angle()
+                    }),
+            ),
             TrenchBroomPhysicsPlugin::new(AvianPhysicsBackend),
         ))
         .add_plugins((user_input::plugin, character_controller::plugin))
         .add_systems(Startup, setup)
-        .add_systems(Update, print_transform)
         .run()
 }
 
@@ -52,8 +58,4 @@ impl Player {
             Collider::capsule(0.25, 1.3),
         ));
     }
-}
-
-fn print_transform(transform: Single<&Transform, With<CharacterController>>) {
-    println!("Position: {}", transform.translation);
 }
