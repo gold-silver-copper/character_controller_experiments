@@ -215,7 +215,7 @@ fn ground_move(
     );
     if let Some(trace) = trace {
         // Treat slopes above a certain angle as falling. This is where surf mechanics come from!!
-        if trace.normal1.y > ctx.cfg.max_slope_cosine {
+        if trace.normal1.y < ctx.cfg.max_slope_cosine {
             return (down, down_velocity);
         }
         transform.translation += cast_dir * trace.distance;
@@ -251,7 +251,7 @@ fn fly_move(
 ) -> (Transform, Vec3) {
     let mut time_left = ctx.dt;
     const NUM_BUMPS: usize = 4;
-    const MAX_CLIP_PLANES: usize = 4;
+    const MAX_CLIP_PLANES: usize = 5;
     let original_velocity = velocity;
     let mut num_planes = 0;
     let mut planes = [Vec3::ZERO; MAX_CLIP_PLANES];
@@ -292,7 +292,7 @@ fn fly_move(
         num_planes += 1;
         let mut i = 0;
         while i < num_planes {
-            velocity = clip_velocity(original_velocity, planes[i], 0.025);
+            velocity = clip_velocity(original_velocity, planes[i], 1.0);
             let mut j = 0;
             while j < num_planes {
                 if i != j && velocity.dot(planes[j]) < 0.0 {
