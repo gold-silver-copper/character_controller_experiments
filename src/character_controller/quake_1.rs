@@ -13,7 +13,6 @@ pub(super) fn plugin(app: &mut App) {
     );
 }
 
-
 fn run_kcc(
     world: &mut World,
     mut kccs: Local<
@@ -159,7 +158,10 @@ fn ground_move(
         return (transform, velocity);
     }
     // first try just moving to the destination
-    let Ok((cast_dir, cast_len)) = Dir3::new_and_length(velocity * ctx.dt) else {
+    let mut cast_dir = velocity * ctx.dt;
+    cast_dir.z = 0.0;
+
+    let Ok((cast_dir, cast_len)) = Dir3::new_and_length(cast_dir) else {
         return (transform, velocity);
     };
 
