@@ -371,14 +371,16 @@ fn air_accelerate(wish_dir: Dir3, wish_speed: f32, velocity: Vec3, ctx: &Ctx) ->
 #[must_use]
 fn friction(
     transform: Transform,
-    velocity: Vec3,
+    mut velocity: Vec3,
     grounded: Option<Entity>,
     ctx: &Ctx,
     spatial: &SpatialQueryPipeline,
 ) -> Vec3 {
     let speed = velocity.length();
     if speed < 0.025 {
-        return Vec3::ZERO;
+        velocity.x = 0.0;
+        velocity.z = 0.0;
+        return velocity;
     }
 
     let mut friction_hz = ctx.cfg.friction_hz;
