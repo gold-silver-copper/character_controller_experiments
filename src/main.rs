@@ -75,7 +75,15 @@ fn main() -> AppExit {
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     commands.spawn(SceneRoot(assets.load("playground.map#Scene")));
-    commands.spawn(Camera3d::default());
+    commands.spawn((
+        Camera3d::default(),
+        EnvironmentMapLight {
+            diffuse_map: assets.load("environment_maps/voortrekker_interior_1k_diffuse.ktx2"),
+            specular_map: assets.load("environment_maps/voortrekker_interior_1k_specular.ktx2"),
+            intensity: 2000.0,
+            ..default()
+        },
+    ));
 }
 
 #[point_class(base(Transform, Visibility))]
@@ -92,7 +100,7 @@ impl Player {
             CharacterController::default(),
             RigidBody::Kinematic,
             TransformInterpolation,
-            Collider::capsule(0.25, 1.3),
+            Collider::cylinder(0.25, 1.8),
         ));
         let camera = world
             .try_query_filtered::<Entity, With<Camera3d>>()

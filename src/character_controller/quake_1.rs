@@ -548,17 +548,24 @@ fn sweep_check(
         transform.rotation,
         direction,
         &ShapeCastConfig {
-            max_distance: max_distance + ctx.cfg.skin_width, // extend the trace slightly
-            target_distance: ctx.cfg.skin_width, // I'm not sure what this does but I think this is correct ;)
+            max_distance: max_distance,
             ignore_origin_penetration: true,
             ..default()
         },
         &ctx.cfg.filter,
     )?;
 
-    // How far is safe to translate by
-    let safe_distance = hit.distance - ctx.cfg.skin_width;
-    hit.distance = safe_distance;
+    let n = hit.normal1;
+    let dir: Vec3 = direction.into();
+    hit.distance = if n.dot(dir) < 0.0 {
+        hit.distance - ctx.cfg.skin_width
+    } else {
+        let angle_between_hit_normal_and_direction = n.angle_between(-dir);
+        let target_distance_to_hit = ctx.cfg.skin_width;
+        let hypothenuse = target_distance_to_hit / angle_between_hit_normal_and_direction.cos();
+        hit.distance - hypothenuse
+    };
+
     Some(hit)
 }
 

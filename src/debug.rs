@@ -1,6 +1,5 @@
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
-use bevy_transform_interpolation::TranslationEasingState;
 
 use crate::character_controller::CharacterController;
 
@@ -15,14 +14,15 @@ fn setup(mut commands: Commands) {
 
 fn update_debug_text(
     mut text: Single<&mut Text, With<DebugText>>,
-    kcc: Single<(&LinearVelocity, &TranslationEasingState), With<CharacterController>>,
+    kcc: Single<&LinearVelocity, With<CharacterController>>,
 ) {
-    let (velocity, interpolation) = kcc.into_inner();
+    let velocity = kcc.into_inner();
     let velocity = velocity.0;
     let speed = velocity.length();
-    let diff = interpolation.end.unwrap_or_default() - interpolation.start.unwrap_or_default();
-    text.0 =
-        format!("Velocity: {speed:.3} {velocity}\nInterpolation: {interpolation:#?}\nDiff: {diff}");
+    text.0 = format!(
+        "Speed: {speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]",
+        velocity.x, velocity.y, velocity.z
+    );
 }
 
 #[derive(Component, Reflect, Debug)]

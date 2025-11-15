@@ -15,9 +15,12 @@ pub(super) fn plugin(app: &mut App) {
 
 fn sync_camera(
     mut camera: Single<&mut Transform, (With<Camera>, Without<Player>)>,
-    player: Single<&GlobalTransform, With<Player>>,
+    player: Single<&Transform, With<Player>>,
 ) {
-    camera.translation = player.translation();
+    // TODO: DIY TransformHelper to use current global transform.
+    // Can't use GlobalTransform directly: outdated -> jitter
+    // Can't use TransformHelper directly: access conflict with &mut Transform
+    camera.translation = player.translation;
 }
 
 fn rotate_camera(
