@@ -13,7 +13,8 @@ use bevy::{
 };
 
 use crate::character_controller::{
-    CharacterControllerSystems, KccRotation, input::AccumulatedInput,
+    CharacterControllerCamera, CharacterControllerCameraOf, CharacterControllerSystems,
+    input::AccumulatedInput,
 };
 
 #[derive(Component, Clone, Reflect, Debug)]
@@ -61,15 +62,16 @@ impl CharacterController {
             kcc.crouch_height
         };
 
-        let Some(controller) = world.entity(ctx.entity).get::<Collider>().cloned() else {
+        let Some(collider) = world.entity(ctx.entity).get::<Collider>().cloned() else {
             return;
         };
+        let standing_aabb = collider.aabb(default(), Rotation::default());
+        let standing_height = standing_aabb.max.y - standing_aabb.min.y;
+
         let Some(mut state) = world.get_mut::<CharacterControllerState>(ctx.entity) else {
             return;
         };
-        state.standing_collider = controller.clone();
-        let standing_aabb = state.standing_collider.aabb(default(), Rotation::default());
-        let standing_height = standing_aabb.max.y - standing_aabb.min.y;
+        state.standing_collider = collider.clone();
 
         let frac = crouch_height / standing_height;
 
@@ -108,7 +110,6 @@ pub(crate) struct CharacterControllerState {
     pub(crate) standing_collider: Collider,
     #[reflect(ignore)]
     pub(crate) crouching_collider: Collider,
-    pub(crate) view_height: f32,
     pub(crate) grounded: Option<Entity>,
     pub(crate) crouching: bool,
 }
@@ -127,7 +128,44 @@ pub(super) fn plugin(app: &mut App) {
     app.add_systems(
         FixedPostUpdate,
         run_kcc.in_set(CharacterControllerSystems::ApplyMovement),
+    )
+    .add_systems(
+        RunFixedMainLoop,
+        sync_camera_transform.after(TransformEasingSystems::UpdateEasingTick),
     );
+}
+
+fn sync_camera_transform(
+    mut cameras: Query<
+        (&mut Transform, &CharacterControllerCameraOf),
+        (Without<CharacterControllerState>,),
+    >,
+    kccs: Query<(
+        &Transform,
+        &CharacterController,
+        &Collider,
+        &CharacterControllerState,
+    )>,
+) {
+    // TODO: DIY TransformHelper to use current global transform.
+    // Can't use GlobalTransform directly: outdated -> jitter
+    // Can't use TransformHelper directly: access conflict with &mut Transform
+    for (mut camera_transform, camera_of) in cameras.iter_mut() {
+        if let Ok((kcc_transform, cfg, collider, state)) = kccs.get(camera_of.0) {
+            let height = if state.crouching {
+                cfg.crouch_height
+            } else {
+                collider.aabb(default(), Rotation::default()).size().y
+            };
+            let view_height = if state.crouching {
+                cfg.crouch_view_height
+            } else {
+                cfg.standing_view_height
+            };
+            camera_transform.translation =
+                kcc_transform.translation + Vec3::Y * (-height / 2.0 + view_height);
+        }
+    }
 }
 
 fn run_kcc(
@@ -141,7 +179,7 @@ fn run_kcc(
             &LinearVelocity,
             &GlobalTransform,
             &ColliderAabb,
-            Option<&KccRotation>,
+            Option<&CharacterControllerCamera>,
         )>,
     >,
     mut scratch: Local<Vec<(Transform, Vec3, Ctx)>>,
@@ -209,7 +247,7 @@ fn move_single(
     ctx.state.previous_velocity = velocity;
     // here we'd handle things like spectator, dead, noclip, etc.
 
-    ctx.state = check_duck(&ctx);
+    ctx.state = check_duck(transform, &spatial, &ctx);
 
     // old:
     transform = nudge_position(transform, &spatial, &ctx);

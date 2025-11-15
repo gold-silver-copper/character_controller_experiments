@@ -9,18 +9,8 @@ use bevy_enhanced_input::prelude::*;
 use crate::{Player, user_input::Rotate};
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Update, (capture_cursor, sync_camera))
+    app.add_systems(Update, capture_cursor)
         .add_observer(rotate_camera);
-}
-
-fn sync_camera(
-    mut camera: Single<&mut Transform, (With<Camera>, Without<Player>)>,
-    player: Single<&Transform, With<Player>>,
-) {
-    // TODO: DIY TransformHelper to use current global transform.
-    // Can't use GlobalTransform directly: outdated -> jitter
-    // Can't use TransformHelper directly: access conflict with &mut Transform
-    camera.translation = player.translation;
 }
 
 fn rotate_camera(

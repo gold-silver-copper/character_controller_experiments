@@ -8,7 +8,7 @@ use bevy::{
 };
 
 use crate::character_controller::{
-    CharacterControllerSystems, KccRotation, input::AccumulatedInput,
+    CharacterControllerCamera, CharacterControllerSystems, input::AccumulatedInput,
 };
 
 #[derive(Component, Clone, Reflect, Debug)]
@@ -132,7 +132,7 @@ fn run_kcc(
             &GlobalTransform,
             &Collider,
             &ColliderAabb,
-            Option<&KccRotation>,
+            Option<&CharacterControllerCamera>,
         )>,
     >,
     mut transforms: Local<QueryState<&GlobalTransform>>,

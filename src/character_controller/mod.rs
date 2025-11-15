@@ -26,9 +26,9 @@ pub(crate) enum CharacterControllerSystems {
 }
 
 #[derive(Component, Clone, Copy)]
-#[relationship(relationship_target = KccRotation)]
-pub(crate) struct KccRotationOf(pub(crate) Entity);
+#[relationship(relationship_target = CharacterControllerCamera)]
+pub(crate) struct CharacterControllerCameraOf(pub(crate) Entity);
 
 #[derive(Component, Clone, Copy)]
-#[relationship_target(relationship = KccRotationOf)]
-pub(crate) struct KccRotation(Entity);
+#[relationship_target(relationship = CharacterControllerCameraOf)]
+pub(crate) struct CharacterControllerCamera(Entity);
