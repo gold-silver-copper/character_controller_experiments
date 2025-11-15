@@ -38,6 +38,9 @@ pub(crate) struct CharacterController {
     pub(crate) ground_distance: f32,
     pub(crate) jump_detection_speed: f32,
     pub(crate) min_walk_cos: f32,
+    pub(crate) stop_speed: f32,
+    pub(crate) friction_hz: f32,
+    pub(crate) speed: Vec2,
 }
 
 impl Default for CharacterController {
@@ -51,6 +54,9 @@ impl Default for CharacterController {
             ground_distance: 0.015,
             jump_detection_speed: 0.5,
             min_walk_cos: 0.7,
+            stop_speed: 5.0,
+            friction_hz: 6.0,
+            speed: Vec2::new(7.0, 8.0),
         }
     }
 }
@@ -279,7 +285,58 @@ fn move_single(
 
 fn walk_move() {}
 
-fn air_move() {}
+fn air_move(
+    mut transform: Transform,
+    mut velocity: Vec3,
+    state: &CharacterControllerState,
+    ctx: &Ctx,
+) -> (Transform, Vec3) {
+    velocity = friction(velocity, state, ctx);
+
+    let movement = ctx.input.last_movement.unwrap_or_default();
+    let cfg_speed = ctx.cfg.speed;
+    let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
+        + cfg_speed.x * movement.x * ctx.orientation.right();
+    wish_vel.y = 0.0;
+    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+
+    // not on ground, so little effect on velocity
+    accelerate();
+
+    // we may have a ground plane that is very steep, even
+    // though we don't have a groundentity
+    // slide along the steep plane
+    if state.ground_plane {
+        clip_velocity();
+    }
+
+    step_slide_move();
+
+    (transform, velocity)
+}
+
+fn friction(mut velocity: Vec3, state: &CharacterControllerState, ctx: &Ctx) -> Vec3 {
+    let mut vec = velocity;
+    if state.walking {
+        // ignore slope movement
+        vec.y = 0.0;
+    }
+    let speed = vec.length();
+    if speed < 0.05 {
+        velocity.x = 0.0;
+        velocity.z = 0.0;
+        return velocity;
+    }
+    let drop = if state.walking {
+        let stop_speed = f32::max(speed, ctx.cfg.stop_speed);
+        stop_speed * ctx.cfg.friction_hz * ctx.dt
+    } else {
+        0.0
+    };
+
+    let new_speed = f32::max(speed - drop, 0.0);
+    velocity / speed * new_speed
+}
 
 fn check_duck(
     transform: Transform,
