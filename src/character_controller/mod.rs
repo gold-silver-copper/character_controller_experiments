@@ -9,15 +9,21 @@ use bevy::{
 mod fixed_update_util;
 mod input;
 mod quake_1;
+//mod quake_3;
 
 pub(crate) use input::{AccumulatedInput, Jump, Movement};
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_plugins((fixed_update_util::plugin, input::plugin, quake_1::plugin))
-        .configure_sets(
-            FixedPostUpdate,
-            CharacterControllerSystems::ApplyMovement.in_set(PhysicsSystems::First),
-        );
+    app.add_plugins((
+        fixed_update_util::plugin,
+        input::plugin,
+        quake_1::plugin,
+        //quake_3::plugin,
+    ))
+    .configure_sets(
+        FixedPostUpdate,
+        CharacterControllerSystems::ApplyMovement.in_set(PhysicsSystems::First),
+    );
 }
 
 #[derive(Component, Clone, Reflect, Debug)]

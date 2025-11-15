@@ -16,6 +16,7 @@ use crate::{
 
 mod camera;
 mod character_controller;
+mod debug;
 mod user_input;
 
 fn main() -> AppExit {
@@ -44,7 +45,6 @@ fn main() -> AppExit {
                     fmt_layer: |_| {
                         Some(Box::new(
                             bevy::log::tracing_subscriber::fmt::Layer::default()
-                                .without_time()
                                 .map_fmt_fields(MakeExt::debug_alt)
                                 .with_writer(std::io::stderr),
                         ))
@@ -67,6 +67,7 @@ fn main() -> AppExit {
             user_input::plugin,
             character_controller::plugin,
             camera::plugin,
+            debug::plugin,
         ))
         .add_systems(Startup, setup)
         .run()
@@ -90,6 +91,7 @@ impl Player {
             PlayerInput,
             CharacterController::default(),
             RigidBody::Kinematic,
+            TransformInterpolation,
             Collider::capsule(0.25, 1.3),
         ));
         let camera = world
