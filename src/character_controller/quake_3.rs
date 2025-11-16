@@ -348,7 +348,7 @@ fn check_jump(mut velocity: Vec3, state: &mut CharacterControllerState, ctx: &Ct
     }
     state.ground_plane = false;
     state.walking = false;
-    velocity.y += ctx.cfg.jump_speed;
+    velocity.y = ctx.cfg.jump_speed;
     // trigger jump event
     (velocity, true)
 }
@@ -756,9 +756,9 @@ fn correct_all_solid(
     ctx: &Ctx,
 ) -> Option<ShapeHitData> {
     let base = transform;
-    for z in -1..1 {
-        for x in -1..1 {
-            for y in -1..1 {
+    for z in -1..=1 {
+        for x in -1..=1 {
+            for y in -1..=1 {
                 let offset = Vec3::new(x as f32, y as f32, z as f32) * 0.05;
                 transform.translation = base.translation + offset;
                 let mut free = true;
