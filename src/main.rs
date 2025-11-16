@@ -104,7 +104,7 @@ impl Player {
         let camera = world
             .try_query_filtered::<Entity, With<Camera3d>>()
             .unwrap()
-            .single(&*world)
+            .single(&world)
             .unwrap();
         world
             .commands()

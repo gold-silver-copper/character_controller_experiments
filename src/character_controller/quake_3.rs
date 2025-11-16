@@ -324,7 +324,7 @@ fn walk_move(
     let jumped: bool;
     (velocity, jumped) = check_jump(velocity, state, ctx);
     if jumped {
-        return air_move(transform, velocity, &spatial, state, ctx);
+        return air_move(transform, velocity, spatial, state, ctx);
     }
 
     velocity = friction(velocity, state, ctx);
@@ -780,7 +780,7 @@ fn correct_all_solid(
                 transform.translation = base.translation + offset;
                 let mut free = true;
                 spatial.shape_intersections_callback(
-                    &state.collider(),
+                    state.collider(),
                     transform.translation,
                     transform.rotation,
                     &ctx.cfg.filter,
@@ -823,12 +823,12 @@ fn sweep_check(
     ctx: &Ctx,
 ) -> Option<ShapeHitData> {
     let mut hit = spatial.cast_shape(
-        &state.collider(),
+        state.collider(),
         transform.translation,
         transform.rotation,
         direction,
         &ShapeCastConfig {
-            max_distance: max_distance,
+            max_distance,
             ignore_origin_penetration: true,
             ..default()
         },

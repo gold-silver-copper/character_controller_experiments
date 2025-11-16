@@ -535,10 +535,10 @@ fn nudge_position(
 ) -> Transform {
     const SIGN: [f32; 3] = [0.0, -1.0, 1.0];
     let base = transform;
-    for z in 0..3 {
-        for x in 0..3 {
-            for y in 0..3 {
-                let offset = Vec3::new(SIGN[x], SIGN[y], SIGN[z]) * 0.005;
+    for z in SIGN {
+        for x in SIGN {
+            for y in SIGN {
+                let offset = Vec3::new(x, y, z) * 0.005;
                 transform.translation = base.translation + offset;
                 let mut free = true;
                 spatial.shape_intersections_callback(
@@ -577,7 +577,7 @@ fn sweep_check(
         transform.rotation,
         direction,
         &ShapeCastConfig {
-            max_distance: max_distance,
+            max_distance,
             ignore_origin_penetration: true,
             ..default()
         },
