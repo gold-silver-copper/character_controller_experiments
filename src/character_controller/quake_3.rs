@@ -12,6 +12,7 @@ use bevy::{
         lifecycle::HookContext, relationship::RelationshipSourceCollection as _,
         world::DeferredWorld,
     },
+    math::VectorSpace,
     prelude::*,
 };
 
@@ -42,6 +43,8 @@ pub(crate) struct CharacterController {
     pub(crate) friction_hz: f32,
     pub(crate) speed: Vec2,
     pub(crate) air_acceleration_hz: f32,
+    pub(crate) num_bumps: usize,
+    pub(crate) gravity: f32,
 }
 
 impl Default for CharacterController {
@@ -59,6 +62,8 @@ impl Default for CharacterController {
             friction_hz: 6.0,
             speed: Vec2::new(7.0, 8.0),
             air_acceleration_hz: 1.0,
+            num_bumps: 4,
+            gravity: 20.0,
         }
     }
 }
@@ -291,6 +296,7 @@ fn walk_move() {}
 fn air_move(
     mut transform: Transform,
     mut velocity: Vec3,
+    spatial: &SpatialQueryPipeline,
     state: &CharacterControllerState,
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
@@ -301,7 +307,7 @@ fn air_move(
     let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
         + cfg_speed.x * movement.x * ctx.orientation.right();
     wish_vel.y = 0.0;
-    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+    let (wish_dir, wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
 
     // not on ground, so little effect on velocity
     velocity = accelerate(
@@ -319,9 +325,187 @@ fn air_move(
         velocity = clip_velocity(velocity, state.grounded.unwrap().normal1);
     }
 
-    step_slide_move();
+    step_slide_move(true, transform, velocity, spatial, state, ctx)
+}
+
+#[must_use]
+fn step_slide_move(
+    gravity: bool,
+    mut transform: Transform,
+    mut velocity: Vec3,
+    spatial: &SpatialQueryPipeline,
+    state: &CharacterControllerState,
+    ctx: &Ctx,
+) -> (Transform, Vec3) {
+    let start_o = transform.translation;
+    let start_v = velocity;
+
+    if slide_move(gravity, transform, velocity, spatial, state, ctx) == false {
+        // we got exactly where we wanted to go first try
+        return (transform, velocity);
+    }
 
     (transform, velocity)
+}
+
+#[must_use]
+fn slide_move(
+    gravity: bool,
+    mut transform: Transform,
+    mut velocity: Vec3,
+    spatial: &SpatialQueryPipeline,
+    state: &CharacterControllerState,
+    ctx: &Ctx,
+) -> (Transform, Vec3, bool) {
+    let mut end_velocity = Vec3::ZERO;
+
+    if gravity {
+        end_velocity = velocity;
+        end_velocity.y -= ctx.dt * ctx.cfg.gravity;
+        velocity.y = (velocity.y + end_velocity.y) * 0.5;
+        if state.ground_plane {
+            // slide along the ground plane
+            velocity = clip_velocity(velocity, state.grounded.unwrap().normal1);
+        }
+    }
+
+    let mut time_left = ctx.dt;
+
+    const MAX_CLIP_PLANES: usize = 5;
+    let mut planes = [Vec3::ZERO; MAX_CLIP_PLANES];
+    // never turn against the ground plane
+    let mut num_planes = if state.ground_plane {
+        planes[0] = state.grounded.unwrap().normal1;
+        1
+    } else {
+        0
+    };
+
+    // never turn against original velocity
+    planes[num_planes] = velocity;
+    num_planes += 1;
+
+    let mut bump_count = 0;
+    while bump_count < ctx.cfg.num_bumps {
+        // calculate position we are trying to move to
+        let (cast_dir, cast_len) =
+            Dir3::new_and_length(time_left * velocity).unwrap_or((Dir3::Z, 0.0));
+
+        // see if we can make it there
+        let trace = sweep_check(transform, cast_dir, cast_len, spatial, state, ctx);
+        let Some(trace) = trace else {
+            // moved the entire distance
+            transform.translation += cast_dir * cast_len;
+            break;
+        };
+        transform.translation += cast_dir * trace.distance;
+        if trace.distance == 0.0 {
+            // entity is completely trapped in another solid
+            // don't build up falling damage, but allow sideways acceleration
+            velocity.y = 0.0;
+            return (transform, velocity, true);
+        }
+
+        // trigger touch event here
+        time_left -= time_left * trace.distance / cast_len;
+
+        if num_planes >= MAX_CLIP_PLANES {
+            return (transform, Vec3::ZERO, true);
+        }
+        // if this is the same plane we hit before, nudge velocity
+        // out along it, which fixes some epsilon issues with
+        // non-axial planes
+        let mut i = 0;
+        while i < num_planes {
+            if trace.normal1.dot(planes[i]) > 0.99 {
+                velocity += trace.normal1 * 0.05;
+                break;
+            }
+            i += 1;
+        }
+        if i < num_planes {
+            bump_count += 1;
+            continue;
+        }
+        planes[num_planes] = trace.normal1;
+        num_planes += 1;
+
+        // modify velocity so it parallels all of the clip planes
+
+        // find a plane that it enters
+        for i in 0..num_planes {
+            let into = velocity.dot(planes[i]);
+            if into >= 0.005 {
+                // move doesn't interact with the plane
+                continue;
+            }
+
+            // see how hard we are hitting things
+            // could use `-into` as the impact speed here and accumulate it
+            // i.e. slide_impact_speed = min(-into, slide_impact_speed)
+            // but Q3 doesn't actually read the value later
+
+            // slide along the plane
+            let mut current_clip_velocity = clip_velocity(velocity, planes[i]);
+            let mut end_clip_velocity = clip_velocity(end_velocity, planes[i]);
+
+            // see if there is a second plane that the new move enters
+            for j in 0..num_planes {
+                if j == i {
+                    continue;
+                }
+                if current_clip_velocity.dot(planes[j]) >= 0.005 {
+                    // move doesn't interact with the plane
+                    continue;
+                }
+
+                // try clipping the move to the plane
+                current_clip_velocity = clip_velocity(current_clip_velocity, planes[j]);
+                end_clip_velocity = clip_velocity(end_clip_velocity, planes[j]);
+
+                // see if it goes back into the first clip plane
+                if current_clip_velocity.dot(planes[i]) >= 0.0 {
+                    continue;
+                }
+
+                // slide the original velocity along the crease
+                let dir = planes[i].cross(planes[j]).normalize();
+                let d = dir.dot(velocity);
+                current_clip_velocity = dir * d;
+
+                let d = dir.dot(end_velocity);
+                end_clip_velocity = dir * d;
+
+                // see if there is a third plane the the new move enters
+                for k in 0..num_planes {
+                    if k == i || k == j {
+                        continue;
+                    }
+
+                    if current_clip_velocity.dot(planes[k]) >= 0.005 {
+                        // move doesn't interact with the plane
+                        continue;
+                    }
+
+                    // stop dead at a tripple plane interaction
+                    return (transform, Vec3::ZERO, true);
+                }
+            }
+            // if we have fixed all interactions, try another move
+            velocity = current_clip_velocity;
+            end_velocity = end_clip_velocity;
+            break;
+        }
+
+        bump_count += 1;
+    }
+    if gravity {
+        velocity = end_velocity;
+    }
+
+    // now Q3 confusedly resets the velocity if in a timer
+
+    (transform, velocity, bump_count != 0)
 }
 
 #[must_use]
