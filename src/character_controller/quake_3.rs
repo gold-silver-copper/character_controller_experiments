@@ -38,7 +38,7 @@ pub(crate) struct CharacterController {
     pub(crate) min_walk_cos: f32,
     pub(crate) stop_speed: f32,
     pub(crate) friction_hz: f32,
-    pub(crate) speed: Vec2,
+    pub(crate) walk_scale: f32,
     pub(crate) acceleration_hz: f32,
     pub(crate) air_acceleration_hz: f32,
     pub(crate) num_bumps: usize,
@@ -47,6 +47,7 @@ pub(crate) struct CharacterController {
     pub(crate) max_slope_cosine: f32,
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
+    pub(crate) max_speed: f32,
 }
 
 impl Default for CharacterController {
@@ -62,7 +63,7 @@ impl Default for CharacterController {
             min_walk_cos: 0.7,
             stop_speed: 5.0,
             friction_hz: 6.0,
-            speed: Vec2::new(8.0, 10.0),
+            walk_scale: 0.5,
             acceleration_hz: 10.0,
             air_acceleration_hz: 1.0,
             num_bumps: 4,
@@ -71,6 +72,7 @@ impl Default for CharacterController {
             max_slope_cosine: 0.7,
             jump_speed: 9.3,
             crouch_scale: 0.25,
+            max_speed: 10.0,
         }
     }
 }
@@ -244,7 +246,7 @@ fn run_kcc(
             match world.run_system_cached_with(move_single, (transform, velocity, state, ctx)) {
                 Ok(val) => val,
                 Err(err) => {
-                    error!("Error running air_move system: {}", err);
+                    error!("Error running move_single system: {}", err);
                     continue;
                 }
             };
@@ -272,7 +274,7 @@ struct Ctx {
 
 #[must_use]
 fn move_single(
-    In((mut transform, mut velocity, mut state, ctx)): In<(
+    In((mut transform, mut velocity, mut state, mut ctx)): In<(
         Transform,
         Vec3,
         CharacterControllerState,
@@ -282,6 +284,7 @@ fn move_single(
 ) -> (Transform, Vec3, CharacterControllerState) {
     state.previous_transform = transform;
     state.previous_velocity = velocity;
+    scale_inputs(&mut ctx);
     // here we'd handle things like spectator, dead, noclip, etc.
 
     check_duck(transform, &spatial, &mut state, &ctx);
@@ -296,6 +299,18 @@ fn move_single(
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
 
     (transform, velocity, state)
+}
+
+fn scale_inputs(ctx: &mut Ctx) {
+    let Some(last_movement) = ctx.input.last_movement.as_mut() else {
+        return;
+    };
+    let speed = if ctx.input.walked {
+        ctx.cfg.walk_scale
+    } else {
+        1.0
+    };
+    *last_movement *= speed;
 }
 
 #[must_use]
@@ -313,17 +328,18 @@ fn walk_move(
     }
 
     velocity = friction(velocity, state, ctx);
+    let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
-    let cfg_speed = ctx.cfg.speed;
-    let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
-        + cfg_speed.x * movement.x * ctx.orientation.right();
+    let mut wish_vel =
+        movement.y * ctx.orientation.forward() + movement.x * ctx.orientation.right();
     wish_vel.y = 0.0;
     let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+    wish_speed *= scale;
 
     // clamp the speed lower if ducking
     if state.crouching {
-        wish_speed = f32::min(wish_speed, velocity.length() * ctx.cfg.crouch_scale);
+        wish_speed = f32::min(wish_speed, ctx.cfg.max_speed * ctx.cfg.crouch_scale);
     }
 
     velocity = accelerate(wish_dir, wish_speed, velocity, ctx.cfg.acceleration_hz, ctx);
@@ -362,13 +378,14 @@ fn air_move(
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
     velocity = friction(velocity, state, ctx);
+    let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
-    let cfg_speed = ctx.cfg.speed;
-    let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
-        + cfg_speed.x * movement.x * ctx.orientation.right();
+    let mut wish_vel =
+        movement.y * ctx.orientation.forward() + movement.x * ctx.orientation.right();
     wish_vel.y = 0.0;
-    let (wish_dir, wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+    wish_speed *= scale;
 
     // not on ground, so little effect on velocity
     velocity = accelerate(
@@ -853,4 +870,17 @@ fn is_intersecting(
         &ctx.cfg.filter,
     );
     hit.is_some()
+}
+
+#[must_use]
+fn cmd_scale(ctx: &Ctx) -> f32 {
+    let Some(mov) = ctx.input.last_movement else {
+        return 0.0;
+    };
+    let max = f32::max(mov.x.abs(), mov.y.abs());
+    if max == 0.0 {
+        return 0.0;
+    }
+    let total = mov.length();
+    ctx.cfg.max_speed * max / total
 }
