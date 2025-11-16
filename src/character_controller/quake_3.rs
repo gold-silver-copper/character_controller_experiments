@@ -46,6 +46,7 @@ pub(crate) struct CharacterController {
     pub(crate) num_bumps: usize,
     pub(crate) gravity: f32,
     pub(crate) step_size: f32,
+    pub(crate) max_slope_cosine: f32,
 }
 
 impl Default for CharacterController {
@@ -66,6 +67,7 @@ impl Default for CharacterController {
             num_bumps: 4,
             gravity: 20.0,
             step_size: 1.0,
+            max_slope_cosine: 0.7,
         }
     }
 }
@@ -353,8 +355,37 @@ fn step_slide_move(
     let trace = sweep_check(start_o, cast_dir, cast_dist, spatial, state, ctx);
 
     // never step up when you still have up velocity
-    if velocity.y > 0.0 || trace.is_none() || trace.is_some_and(|t| t.normal1.dot(Vec3::Y))
+    if velocity.y > 0.0
+        || trace.is_none()
+        || trace.is_some_and(|t| t.normal1.dot(Vec3::Y) < ctx.cfg.max_slope_cosine)
+    {
+        return (transform, velocity);
+    }
 
+    let cast_dir = Dir3::Y;
+    // test the player position if they were a stepheight higher
+    let trace = sweep_check(start_o, cast_dir, cast_dist, spatial, state, ctx);
+    let Some(trace) = trace else {
+        // can't step up
+        return (transform, velocity);
+    };
+    let step_size = trace.distance;
+
+    // try slidemove from this position
+    transform.translation = start_o.translation + cast_dir * step_size;
+    velocity = start_v;
+
+    (transform, velocity, _) = slide_move(gravity, transform, velocity, spatial, state, ctx);
+
+    // push down the final amount
+    let cast_dir = Dir3::NEG_Y;
+    let cast_dist = step_size;
+    let trace = sweep_check(transform, cast_dir, cast_dist, spatial, state, ctx);
+    if let Some(trace) = trace {
+        velocity = clip_velocity(velocity, trace.normal1);
+    } else {
+        transform.translation += cast_dir * cast_dist;
+    }
     (transform, velocity)
 }
 
