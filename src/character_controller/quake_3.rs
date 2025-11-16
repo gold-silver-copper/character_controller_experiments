@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use avian3d::{
-    parry::{
-        query::ShapeCastHit,
-        shape::{Capsule, SharedShape},
-    },
+    parry::shape::{Capsule, SharedShape},
     prelude::*,
 };
 use bevy::{
@@ -12,7 +9,6 @@ use bevy::{
         lifecycle::HookContext, relationship::RelationshipSourceCollection as _,
         world::DeferredWorld,
     },
-    math::VectorSpace,
     prelude::*,
 };
 
@@ -42,11 +38,14 @@ pub(crate) struct CharacterController {
     pub(crate) stop_speed: f32,
     pub(crate) friction_hz: f32,
     pub(crate) speed: Vec2,
+    pub(crate) acceleration_hz: f32,
     pub(crate) air_acceleration_hz: f32,
     pub(crate) num_bumps: usize,
     pub(crate) gravity: f32,
     pub(crate) step_size: f32,
     pub(crate) max_slope_cosine: f32,
+    pub(crate) jump_speed: f32,
+    pub(crate) crouch_scale: f32,
 }
 
 impl Default for CharacterController {
@@ -63,11 +62,14 @@ impl Default for CharacterController {
             stop_speed: 5.0,
             friction_hz: 6.0,
             speed: Vec2::new(7.0, 8.0),
+            acceleration_hz: 10.0,
             air_acceleration_hz: 1.0,
             num_bumps: 4,
             gravity: 20.0,
             step_size: 1.0,
             max_slope_cosine: 0.7,
+            jump_speed: 15.0,
+            crouch_scale: 0.25,
         }
     }
 }
@@ -285,20 +287,74 @@ fn move_single(
 
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
 
-    if state.walking {
-        walk_move();
+    (transform, velocity) = if state.walking {
+        walk_move(transform, velocity, &spatial, &mut state, &ctx)
     } else {
-        air_move();
-    }
+        air_move(transform, velocity, &spatial, &state, &ctx)
+    };
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
 
     (transform, velocity, state)
 }
 
-fn walk_move() {}
+#[must_use]
+fn walk_move(
+    transform: Transform,
+    mut velocity: Vec3,
+    spatial: &SpatialQueryPipeline,
+    state: &mut CharacterControllerState,
+    ctx: &Ctx,
+) -> (Transform, Vec3) {
+    let jumped: bool;
+    (velocity, jumped) = check_jump(velocity, state, ctx);
+    if jumped {
+        return air_move(transform, velocity, &spatial, state, ctx);
+    }
 
+    velocity = friction(velocity, state, ctx);
+
+    let movement = ctx.input.last_movement.unwrap_or_default();
+    let cfg_speed = ctx.cfg.speed;
+    let mut wish_vel = cfg_speed.y * movement.y * ctx.orientation.forward()
+        + cfg_speed.x * movement.x * ctx.orientation.right();
+    wish_vel.y = 0.0;
+    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
+
+    // clamp the speed lower if ducking
+    if state.crouching {
+        wish_speed = f32::min(wish_speed, velocity.length() * ctx.cfg.crouch_scale);
+    }
+
+    velocity = accelerate(wish_dir, wish_speed, velocity, ctx.cfg.acceleration_hz, ctx);
+
+    let acceleration_speed = velocity.length();
+    velocity = clip_velocity(velocity, state.grounded.unwrap().normal1);
+
+    // don't decrease velocity when going up or down a slope
+    velocity = velocity.normalize_or_zero() * acceleration_speed;
+    // don't do anything if standing still
+    if velocity.xz() == Vec2::ZERO {
+        return (transform, velocity);
+    }
+
+    step_slide_move(false, transform, velocity, spatial, state, ctx)
+}
+
+#[must_use]
+fn check_jump(mut velocity: Vec3, state: &mut CharacterControllerState, ctx: &Ctx) -> (Vec3, bool) {
+    if !ctx.input.jumped {
+        return (velocity, false);
+    }
+    state.ground_plane = false;
+    state.walking = false;
+    velocity.y += ctx.cfg.jump_speed;
+    // trigger jump event
+    (velocity, true)
+}
+
+#[must_use]
 fn air_move(
-    mut transform: Transform,
+    transform: Transform,
     mut velocity: Vec3,
     spatial: &SpatialQueryPipeline,
     state: &CharacterControllerState,
