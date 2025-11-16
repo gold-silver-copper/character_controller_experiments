@@ -462,11 +462,15 @@ fn step_slide_move(
     let cast_dir = Dir3::Y;
     // test the player position if they were a stepheight higher
     let trace = sweep_check(start_o, cast_dir, cast_dist, spatial, state, ctx);
-    let Some(trace) = trace else {
+    let step_size = if let Some(trace) = trace {
+        trace.distance
+    } else {
+        cast_dist
+    };
+    if step_size == 0.0 {
         // can't step up
         return (transform, velocity);
-    };
-    let step_size = trace.distance;
+    }
 
     // try slidemove from this position
     transform.translation = start_o.translation + cast_dir * step_size;
