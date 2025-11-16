@@ -3,6 +3,7 @@ use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     gltf::GltfPlugin,
     log::{LogPlugin, tracing_subscriber::field::MakeExt},
+    pbr::Atmosphere,
     prelude::*,
 };
 use bevy_enhanced_input::prelude::*;
@@ -83,6 +84,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             intensity: 2000.0,
             ..default()
         },
+        Atmosphere::EARTH,
     ));
 }
 

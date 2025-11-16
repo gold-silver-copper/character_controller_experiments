@@ -61,7 +61,6 @@
 "classname" "light_directional"
 "origin" "96 64 48"
 "angles" "45 -120 -179"
-"illuminance" "20000"
 }
 // entity 3
 {
