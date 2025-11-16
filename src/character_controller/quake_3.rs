@@ -64,15 +64,15 @@ impl Default for CharacterController {
             stop_speed: 5.0,
             friction_hz: 6.0,
             walk_scale: 0.5,
-            acceleration_hz: 10.0,
+            acceleration_hz: 12.0,
             air_acceleration_hz: 1.0,
             num_bumps: 4,
-            gravity: 30.0,
+            gravity: 50.0,
             step_size: 1.0,
             max_slope_cosine: 0.7,
-            jump_speed: 9.3,
+            jump_speed: 14.3,
             crouch_scale: 0.25,
-            max_speed: 10.0,
+            max_speed: 18.0,
         }
     }
 }
@@ -135,8 +135,7 @@ impl CharacterController {
 #[derive(Component, Clone, Reflect, Default, Debug)]
 #[reflect(Component)]
 pub(crate) struct CharacterControllerState {
-    pub(crate) previous_transform: Transform,
-    pub(crate) previous_velocity: Vec3,
+    pub(crate) velocity: Vec3,
     #[reflect(ignore)]
     pub(crate) standing_collider: Collider,
     #[reflect(ignore)]
@@ -286,8 +285,7 @@ fn move_single(
     )>,
     spatial: Res<SpatialQueryPipeline>,
 ) -> (Transform, Vec3, CharacterControllerState) {
-    state.previous_transform = transform;
-    state.previous_velocity = velocity;
+    velocity = state.velocity;
     scale_inputs(&mut ctx);
     // here we'd handle things like spectator, dead, noclip, etc.
 
@@ -301,8 +299,9 @@ fn move_single(
         air_move(transform, velocity, &spatial, &state, &ctx)
     };
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
+    state.velocity = velocity;
 
-    (transform, velocity, state)
+    (transform, Vec3::ZERO, state)
 }
 
 fn scale_inputs(ctx: &mut Ctx) {

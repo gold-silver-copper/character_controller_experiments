@@ -1,7 +1,7 @@
 use avian3d::prelude::{ColliderAabb, LinearVelocity};
 use bevy::prelude::*;
 
-use crate::character_controller::CharacterController;
+use crate::character_controller::{CharacterController, CharacterControllerState};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
@@ -14,11 +14,11 @@ fn setup(mut commands: Commands) {
 
 fn update_debug_text(
     mut text: Single<&mut Text, With<DebugText>>,
-    kcc: Single<(&LinearVelocity, &ColliderAabb), With<CharacterController>>,
+    kcc: Single<(&CharacterControllerState, &ColliderAabb), With<CharacterController>>,
     camera: Single<&Transform, With<Camera>>,
 ) {
-    let (velocity, aabb) = kcc.into_inner();
-    let velocity = velocity.0;
+    let (state, aabb) = kcc.into_inner();
+    let velocity = state.velocity;
     let speed = velocity.length();
     let camera_position = camera.translation;
     text.0 = format!(
