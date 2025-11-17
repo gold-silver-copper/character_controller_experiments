@@ -388,7 +388,8 @@ fn step_slide_move(
     let clipped: bool;
     (transform, velocity, clipped) = slide_move(gravity, transform, velocity, spatial, state, ctx);
 
-    if !clipped {
+    // Non-Quake: also don't step in the air
+    if !clipped || !state.walking {
         // we got exactly where we wanted to go first try
         return (transform, velocity);
     }
@@ -437,7 +438,10 @@ fn step_slide_move(
         transform.translation += cast_dir * cast_dist;
     }
 
-    // non-Quake code incoming: if we didn't really step up or we stepped onto something we would slide down from,
+    // non-Quake code incoming: if we
+    // - didn't really step up
+    // - stepped onto something we would slide down from
+    // - could have moved to the skepped place directly
     // let's not step at all. That eliminates nasty situations where we get "ghost steps" when penetrating walls.
     let direct_horizontal_dist = start_o
         .translation
