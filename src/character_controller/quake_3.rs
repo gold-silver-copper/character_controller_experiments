@@ -388,10 +388,14 @@ fn step_slide_move(
 
     let clipped: bool;
     (transform, velocity, clipped) = slide_move(gravity, transform, velocity, spatial, state, ctx);
+
     if !clipped {
         // we got exactly where we wanted to go first try
         return (transform, velocity);
     }
+    let direct_transform = transform;
+    let direct_velocity = velocity;
+
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = ctx.cfg.step_size;
     let trace = sweep_check(start_o, cast_dir, cast_dist, spatial, state, ctx);
@@ -433,7 +437,30 @@ fn step_slide_move(
     } else {
         transform.translation += cast_dir * cast_dist;
     }
-    (transform, velocity)
+
+    // non-Quake code incoming: if we didn't really step up or we stepped onto something we would slide down from,
+    // let's not step at all. That eliminates nasty situations where we get "ghost steps" when penetrating walls.
+    let direct_horizontal_dist = start_o
+        .translation
+        .xz()
+        .distance_squared(direct_transform.translation.xz());
+    let step_horizontal_dist = start_o
+        .translation
+        .xz()
+        .distance_squared(transform.translation.xz());
+    let did_not_advance_through_stepping = direct_horizontal_dist >= step_horizontal_dist;
+
+    let step_delta = start_o.translation - transform.translation;
+    let (step_dir, step_distance) = Dir3::new_and_length(step_delta).unwrap_or((Dir3::NEG_Z, 0.0));
+
+    if did_not_advance_through_stepping
+        || trace.is_some_and(|t| t.normal1.y < ctx.cfg.min_walk_cos)
+        || sweep_check(transform, step_dir, step_distance, spatial, state, ctx).is_none()
+    {
+        (direct_transform, direct_velocity)
+    } else {
+        (transform, velocity)
+    }
 }
 
 #[must_use]
