@@ -1,4 +1,4 @@
-use avian3d::prelude::*;
+use avian3d::{math::TAU, prelude::*};
 use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     gltf::GltfPlugin,
@@ -88,6 +88,10 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             intensity: 2000.0,
             ..default()
         },
+        Projection::Perspective(PerspectiveProjection {
+            fov: 70.0_f32.to_radians(),
+            ..default()
+        }),
         Atmosphere::EARTH,
     ));
 }
