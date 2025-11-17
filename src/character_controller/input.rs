@@ -1,16 +1,14 @@
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 
-use crate::character_controller::fixed_update_util::did_fixed_update_happen;
-
 pub(super) fn plugin(app: &mut App) {
     app.add_observer(apply_movement)
         .add_observer(apply_jump)
         .add_observer(apply_crouch)
         .add_observer(apply_walk)
         .add_systems(
-            Update,
-            clear_accumulated_input.run_if(did_fixed_update_happen),
+            RunFixedMainLoop,
+            clear_accumulated_input.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
         );
 }
 
