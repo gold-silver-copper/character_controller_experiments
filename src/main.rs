@@ -1,4 +1,4 @@
-use avian3d::{math::TAU, prelude::*};
+use avian3d::prelude::*;
 use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     gltf::GltfPlugin,
