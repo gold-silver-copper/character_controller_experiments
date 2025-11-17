@@ -11,7 +11,9 @@ use bevy_trenchbroom::prelude::*;
 use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
 use crate::{
-    character_controller::{CharacterController, CharacterControllerCameraOf},
+    character_controller::{
+        CharacterController, CharacterControllerCameraOf, CharacterControllerState,
+    },
     user_input::PlayerInput,
 };
 
@@ -72,7 +74,7 @@ fn main() -> AppExit {
             debug::plugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(FixedUpdate, reset_player)
+        .add_systems(FixedPreUpdate, reset_player)
         .run()
 }
 
@@ -132,8 +134,13 @@ impl SpawnPlayer {
     }
 }
 
-fn reset_player(mut player: Single<&mut Transform, With<Player>>) {
-    if player.translation.y < -100.0 {
-        player.translation = Vec3::ZERO;
+fn reset_player(
+    player: Single<(&mut Transform, &mut CharacterControllerState), With<Player>>,
+    spawner: Single<&Transform, (With<SpawnPlayer>, Without<Player>)>,
+) {
+    let (mut transform, mut state) = player.into_inner();
+    if transform.translation.y < -50.0 {
+        state.velocity.y = 0.0;
+        transform.translation = spawner.translation;
     }
 }
