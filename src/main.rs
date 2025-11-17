@@ -21,6 +21,7 @@ use crate::{
 mod camera;
 mod character_controller;
 mod debug;
+mod props;
 mod user_input;
 
 fn main() -> AppExit {
