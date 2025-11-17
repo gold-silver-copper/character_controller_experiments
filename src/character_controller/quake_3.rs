@@ -42,7 +42,6 @@ pub(crate) struct CharacterController {
     pub(crate) num_bumps: usize,
     pub(crate) gravity: f32,
     pub(crate) step_size: f32,
-    pub(crate) max_slope_cosine: f32,
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
     pub(crate) max_speed: f32,
@@ -53,7 +52,7 @@ impl Default for CharacterController {
         Self {
             crouch_height: 1.3,
             filter: SpatialQueryFilter::default(),
-            skin_width: 0.001,
+            skin_width: 0.0025,
             standing_view_height: 1.7,
             crouch_view_height: 1.2,
             ground_distance: 0.015,
@@ -66,7 +65,6 @@ impl Default for CharacterController {
             num_bumps: 4,
             gravity: 50.0,
             step_size: 1.0,
-            max_slope_cosine: 0.7,
             jump_speed: 14.3,
             crouch_scale: 0.25,
             max_speed: 18.0,
@@ -132,7 +130,6 @@ impl CharacterController {
 #[derive(Component, Clone, Reflect, Default, Debug)]
 #[reflect(Component)]
 pub(crate) struct CharacterControllerState {
-    pub(crate) wish_velocity: Vec3,
     pub(crate) velocity: Vec3,
     #[reflect(ignore)]
     pub(crate) standing_collider: Collider,
@@ -200,7 +197,7 @@ fn run_kcc(
     );
     for (transform, state, ctx) in scratch.drain(..) {
         let entity = ctx.entity;
-        let (transform, state): (Transform, CharacterControllerState) =
+        let (velocity, state): (Vec3, CharacterControllerState) =
             match world.run_system_cached_with(move_single, (transform, state, ctx)) {
                 Ok(val) => val,
                 Err(err) => {
@@ -208,7 +205,11 @@ fn run_kcc(
                     continue;
                 }
             };
-        *world.entity_mut(entity).get_mut::<Transform>().unwrap() = transform;
+        world
+            .entity_mut(entity)
+            .get_mut::<LinearVelocity>()
+            .unwrap()
+            .0 = velocity;
         {
             let mut entity = world.entity_mut(entity);
             let mut current_collider = entity.get_mut::<Collider>().unwrap();
@@ -237,9 +238,9 @@ struct Ctx {
 fn move_single(
     In((mut transform, mut state, ctx)): In<(Transform, CharacterControllerState, Ctx)>,
     spatial: Res<SpatialQueryPipeline>,
-) -> (Transform, CharacterControllerState) {
+) -> (Vec3, CharacterControllerState) {
     let original_transform = transform;
-    let mut velocity = state.wish_velocity;
+    let mut velocity = state.velocity;
     // here we'd handle things like spectator, dead, noclip, etc.
 
     check_duck(transform, &spatial, &mut state, &ctx);
@@ -252,32 +253,25 @@ fn move_single(
         air_move(transform, velocity, &spatial, &state, &ctx)
     };
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
-    (transform, velocity) = dejitter_output(original_transform, transform, velocity);
-    state.wish_velocity = velocity;
-    state.velocity = (original_transform.translation - transform.translation) / ctx.dt;
+    transform = dejitter_output(original_transform, transform);
 
-    (transform, state)
+    state.velocity = velocity;
+    let physics_velocity = (transform.translation - original_transform.translation) / ctx.dt;
+
+    (physics_velocity, state)
 }
 
-fn dejitter_output(
-    original_transform: Transform,
-    mut transform: Transform,
-    mut velocity: Vec3,
-) -> (Transform, Vec3) {
-    const EPSILON: f32 = 0.001;
+fn dejitter_output(original_transform: Transform, mut transform: Transform) -> Transform {
+    const EPSILON: f32 = 0.0005;
 
     for i in 0..3 {
         let delta_pos = original_transform.translation - transform.translation;
         if delta_pos[i].abs() < EPSILON {
             transform.translation[i] = original_transform.translation[i];
         }
-
-        if velocity[i].abs() < EPSILON {
-            velocity[i] = 0.0;
-        }
     }
 
-    (transform, velocity)
+    transform
 }
 
 #[must_use]
@@ -427,8 +421,7 @@ fn step_slide_move(
 
     // never step up when you still have up velocity
     if velocity.y > 0.0
-        && (trace.is_none()
-            || trace.is_some_and(|t| t.normal1.dot(Vec3::Y) < ctx.cfg.max_slope_cosine))
+        && (trace.is_none() || trace.is_some_and(|t| t.normal1.dot(Vec3::Y) < ctx.cfg.min_walk_cos))
     {
         return (transform, velocity);
     }
@@ -466,7 +459,6 @@ fn step_slide_move(
     // non-Quake code incoming: if we
     // - didn't really step up
     // - stepped onto something we would slide down from
-    // - could have moved to the skepped place directly
     // let's not step at all. That eliminates nasty situations where we get "ghost steps" when penetrating walls.
     let direct_horizontal_dist = start_o
         .translation
@@ -476,14 +468,9 @@ fn step_slide_move(
         .translation
         .xz()
         .distance_squared(transform.translation.xz());
-    let did_not_advance_through_stepping = direct_horizontal_dist >= step_horizontal_dist;
+    let did_not_advance_through_stepping = direct_horizontal_dist >= step_horizontal_dist - 0.001;
 
-    let step_delta = start_o.translation - transform.translation;
-    let (step_dir, step_distance) = Dir3::new_and_length(step_delta).unwrap_or((Dir3::NEG_Z, 0.0));
-
-    if did_not_advance_through_stepping
-        || trace.is_some_and(|t| t.normal1.y < ctx.cfg.min_walk_cos)
-        || sweep_check(transform, step_dir, step_distance, spatial, state, ctx).is_none()
+    if did_not_advance_through_stepping || trace.is_some_and(|t| t.normal1.y < ctx.cfg.min_walk_cos)
     {
         (direct_transform, direct_velocity)
     } else {
@@ -565,7 +552,7 @@ fn slide_move(
         let mut i = 0;
         while i < num_planes {
             if trace.normal1.dot(planes[i]) > 0.99 {
-                velocity += trace.normal1 * ctx.cfg.skin_width;
+                velocity += trace.normal1 * 0.05;
                 break;
             }
             i += 1;
@@ -582,7 +569,7 @@ fn slide_move(
         // find a plane that it enters
         for i in 0..num_planes {
             let into = velocity.dot(planes[i]);
-            if into >= 0.005 {
+            if into >= 0.001 {
                 // move doesn't interact with the plane
                 continue;
             }
@@ -601,7 +588,7 @@ fn slide_move(
                 if j == i {
                     continue;
                 }
-                if current_clip_velocity.dot(planes[j]) >= 0.005 {
+                if current_clip_velocity.dot(planes[j]) >= 0.001 {
                     // move doesn't interact with the plane
                     continue;
                 }
@@ -629,7 +616,7 @@ fn slide_move(
                         continue;
                     }
 
-                    if current_clip_velocity.dot(planes[k]) >= 0.005 {
+                    if current_clip_velocity.dot(planes[k]) >= 0.001 {
                         // move doesn't interact with the plane
                         continue;
                     }
@@ -871,7 +858,7 @@ fn sweep_check(
     let n = hit.normal1;
     let dir: Vec3 = direction.into();
 
-    if n.dot(-dir).abs() > 0.001 {
+    if n.dot(dir).abs() > 0.0001 {
         let hypothenuse = ctx.cfg.skin_width / n.dot(-dir);
         hit.distance -= hypothenuse;
     }
