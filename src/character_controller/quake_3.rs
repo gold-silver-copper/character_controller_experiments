@@ -237,6 +237,8 @@ fn move_single(
     In((mut transform, mut state, ctx)): In<(Transform, CharacterControllerState, Ctx)>,
     spatial: Res<SpatialQueryPipeline>,
 ) -> (Transform, CharacterControllerState) {
+    let original_transform = transform;
+    let original_velocity = state.velocity;
     let mut velocity = state.velocity;
     // here we'd handle things like spectator, dead, noclip, etc.
 
@@ -250,9 +252,37 @@ fn move_single(
         air_move(transform, velocity, &spatial, &state, &ctx)
     };
     ground_trace(transform, velocity, &spatial, &mut state, &ctx);
+    (transform, velocity) =
+        dejitter_output(original_transform, transform, original_velocity, velocity);
     state.velocity = velocity;
 
     (transform, state)
+}
+
+fn dejitter_output(
+    original_transform: Transform,
+    mut transform: Transform,
+    original_velocity: Vec3,
+    mut velocity: Vec3,
+) -> (Transform, Vec3) {
+    const EPSILON: f32 = 0.001;
+
+    for i in 0..3 {
+        let delta_pos = original_transform.translation - transform.translation;
+        if delta_pos[i].abs() < EPSILON {
+            transform.translation[i] = original_transform.translation[i];
+        }
+
+        let delta_v = original_velocity - velocity;
+        if delta_v[i].abs() < EPSILON {
+            velocity[i] = original_velocity[i];
+        }
+        if velocity[i].abs() < EPSILON {
+            velocity[i] = 0.0;
+        }
+    }
+
+    (transform, velocity)
 }
 
 #[must_use]
