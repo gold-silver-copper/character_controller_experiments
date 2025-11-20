@@ -509,10 +509,7 @@ fn step_slide_move(
     );
     if let Some(sweep_hit) = sweep_hit {
         transform.translation += cast_dir * sweep_hit.safe_distance;
-        velocity = MoveAndSlide::clip_velocity(
-            velocity,
-            &[sweep_hit.shape_hit.normal1.try_into().unwrap()],
-        );
+        velocity = MoveAndSlide::clip_velocity(velocity, &[sweep_hit.normal1.try_into().unwrap()]);
     } else {
         transform.translation += cast_dir * cast_dist;
     }
