@@ -1,14 +1,16 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+mod custom;
 mod input;
 #[allow(dead_code)]
 mod quake_1;
+#[allow(dead_code)]
 mod quake_3;
 
+use custom as kcc;
 pub(crate) use input::*;
 pub(crate) use kcc::*;
-use quake_3 as kcc;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_plugins((input::plugin, kcc::plugin))

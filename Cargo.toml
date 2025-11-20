@@ -24,3 +24,6 @@ too_many_arguments = "allow"
 type_complexity = "allow"
 # I hate this one
 needless_range_loop = "allow"
+
+[patch.crates-io]
+avian3d = {version = "0.4.1", git = "https://github.com/janhohenheim/avian", branch = "cns"}
