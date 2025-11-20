@@ -43,7 +43,7 @@ pub(crate) struct CharacterController {
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
     pub(crate) speed: f32,
-    pub(crate) collide_and_slide: CollideAndSlideConfig,
+    pub(crate) move_and_slide: MoveAndSlideConfig,
 }
 
 impl Default for CharacterController {
@@ -65,7 +65,7 @@ impl Default for CharacterController {
             jump_speed: 14.3,
             crouch_scale: 0.25,
             speed: 18.0,
-            collide_and_slide: CollideAndSlideConfig {
+            move_and_slide: MoveAndSlideConfig {
                 skin_width: 0.003,
                 ..default()
             },
@@ -232,22 +232,23 @@ struct Ctx {
 #[must_use]
 fn move_single(
     In((mut transform, mut state, ctx)): In<(Transform, CharacterControllerState, Ctx)>,
-    collide_and_slide: CollideAndSlide,
+    move_and_slide: MoveAndSlide,
 ) -> (Vec3, CharacterControllerState) {
     let original_transform = transform;
     let mut velocity = state.velocity;
     // here we'd handle things like spectator, dead, noclip, etc.
 
-    check_duck(transform, &collide_and_slide, &mut state, &ctx);
+    check_duck(transform, &move_and_slide, &mut state, &ctx);
 
-    ground_trace(transform, velocity, &collide_and_slide, &mut state, &ctx);
+    ground_trace(transform, velocity, &move_and_slide, &mut state, &ctx);
 
     (transform, velocity) = if state.walking {
-        walk_move(transform, velocity, &collide_and_slide, &mut state, &ctx)
+        walk_move(transform, velocity, &move_and_slide, &mut state, &ctx)
     } else {
-        air_move(transform, velocity, &collide_and_slide, &state, &ctx)
+        air_move(transform, velocity, &move_and_slide, &state, &ctx)
     };
-    ground_trace(transform, velocity, &collide_and_slide, &mut state, &ctx);
+    ground_trace(transform, velocity, &move_and_slide, &mut state, &ctx);
+
     transform = dejitter_output(original_transform, transform);
 
     state.velocity = velocity;
@@ -272,30 +273,30 @@ fn dejitter_output(original_transform: Transform, mut transform: Transform) -> T
 fn walk_move(
     transform: Transform,
     mut velocity: Vec3,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
     let jumped: bool;
     (velocity, jumped) = check_jump(velocity, state, ctx);
     if jumped {
-        return air_move(transform, velocity, collide_and_slide, state, ctx);
+        return air_move(transform, velocity, move_and_slide, state, ctx);
     }
 
-    velocity = friction(velocity, state, collide_and_slide, ctx);
+    velocity = friction(velocity, state, move_and_slide, ctx);
     let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
     let mut forward = Vec3::from(ctx.orientation.forward());
     forward.y = 0.0;
     if let Some(grounded) = state.grounded {
-        forward = CollideAndSlide::clip_velocity(forward, &[grounded.normal1.try_into().unwrap()]);
+        forward = MoveAndSlide::clip_velocity(forward, &[grounded.normal1.try_into().unwrap()]);
     }
     forward = forward.normalize_or_zero();
     let mut right = Vec3::from(ctx.orientation.right());
     right.y = 0.0;
     if let Some(grounded) = state.grounded {
-        right = CollideAndSlide::clip_velocity(right, &[grounded.normal1.try_into().unwrap()]);
+        right = MoveAndSlide::clip_velocity(right, &[grounded.normal1.try_into().unwrap()]);
     }
     right = right.normalize_or_zero();
 
@@ -316,14 +317,13 @@ fn walk_move(
         wish_speed,
         velocity,
         ctx.cfg.acceleration_hz,
-        collide_and_slide,
+        move_and_slide,
     );
 
     let acceleration_speed = velocity.length();
 
     if let Some(grounded) = state.grounded {
-        velocity =
-            CollideAndSlide::clip_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
+        velocity = MoveAndSlide::clip_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
     }
 
     // don't decrease velocity when going up or down a slope
@@ -333,7 +333,7 @@ fn walk_move(
         return (transform, velocity);
     }
 
-    step_slide_move(false, transform, velocity, collide_and_slide, state, ctx)
+    step_slide_move(false, transform, velocity, move_and_slide, state, ctx)
 }
 
 #[must_use]
@@ -352,11 +352,11 @@ fn check_jump(mut velocity: Vec3, state: &mut CharacterControllerState, ctx: &Ct
 fn air_move(
     transform: Transform,
     mut velocity: Vec3,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     state: &CharacterControllerState,
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
-    velocity = friction(velocity, state, collide_and_slide, ctx);
+    velocity = friction(velocity, state, move_and_slide, ctx);
     let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
@@ -378,7 +378,7 @@ fn air_move(
         wish_speed,
         velocity,
         ctx.cfg.air_acceleration_hz,
-        collide_and_slide,
+        move_and_slide,
     );
 
     // we may have a ground plane that is very steep, even
@@ -387,11 +387,10 @@ fn air_move(
     if state.ground_plane
         && let Some(grounded) = state.grounded
     {
-        velocity =
-            CollideAndSlide::clip_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
+        velocity = MoveAndSlide::clip_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
     }
 
-    step_slide_move(true, transform, velocity, collide_and_slide, state, ctx)
+    step_slide_move(true, transform, velocity, move_and_slide, state, ctx)
 }
 
 #[must_use]
@@ -399,24 +398,24 @@ fn step_slide_move(
     gravity: bool,
     mut transform: Transform,
     mut velocity: Vec3,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     state: &CharacterControllerState,
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
     if gravity {
-        velocity += Vec3::NEG_Y * ctx.cfg.gravity * collide_and_slide.time.delta_secs();
+        velocity += Vec3::NEG_Y * ctx.cfg.gravity * move_and_slide.time.delta_secs();
     }
 
     let start_o = transform;
     let start_v = velocity;
 
     let mut clipped = false;
-    let result = collide_and_slide.collide_and_slide(
+    let result = move_and_slide.move_and_slide(
         state.collider(),
         transform.rotation,
         transform.translation,
         velocity,
-        &ctx.cfg.collide_and_slide,
+        &ctx.cfg.move_and_slide,
         &ctx.cfg.filter,
         |_| {
             clipped = true;
@@ -436,7 +435,7 @@ fn step_slide_move(
 
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = ctx.cfg.step_size;
-    let trace = collide_and_slide.query_pipeline.cast_shape(
+    let trace = move_and_slide.query_pipeline.cast_shape(
         state.collider(),
         start_o.translation,
         start_o.rotation,
@@ -454,16 +453,17 @@ fn step_slide_move(
 
     let cast_dir = Dir3::Y;
     // test the player position if they were a stepheight higher
-    let trace = collide_and_slide.query_pipeline.cast_shape(
+    let sweep_hit = move_and_slide.sweep(
         state.collider(),
         start_o.translation,
         start_o.rotation,
         cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_dist),
+        cast_dist,
+        ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
-    let step_size = if let Some(trace) = trace {
-        trace.distance
+    let step_size = if let Some(sweep_hit) = sweep_hit {
+        sweep_hit.safe_distance
     } else {
         cast_dist
     };
@@ -474,14 +474,21 @@ fn step_slide_move(
 
     // try slidemove from this position
     transform.translation = start_o.translation + cast_dir * step_size;
+    transform.translation += move_and_slide.depenetrate(
+        state.collider(),
+        transform.rotation,
+        transform.translation,
+        &ctx.cfg.filter,
+        &ctx.cfg.move_and_slide,
+    );
     velocity = start_v;
 
-    let result = collide_and_slide.collide_and_slide(
+    let result = move_and_slide.move_and_slide(
         state.collider(),
         transform.rotation,
         transform.translation,
         velocity,
-        &ctx.cfg.collide_and_slide,
+        &ctx.cfg.move_and_slide,
         &ctx.cfg.filter,
         |_| true,
     );
@@ -491,20 +498,31 @@ fn step_slide_move(
     // push down the final amount
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = step_size;
-    let trace = collide_and_slide.query_pipeline.cast_shape(
+    let sweep_hit = move_and_slide.sweep(
         state.collider(),
         transform.translation,
         transform.rotation,
         cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_dist),
+        cast_dist,
+        ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
-    if let Some(trace) = trace {
-        transform.translation += cast_dir * trace.distance;
-        velocity = CollideAndSlide::clip_velocity(velocity, &[trace.normal1.try_into().unwrap()]);
+    if let Some(sweep_hit) = sweep_hit {
+        transform.translation += cast_dir * sweep_hit.safe_distance;
+        velocity = MoveAndSlide::clip_velocity(
+            velocity,
+            &[sweep_hit.shape_hit.normal1.try_into().unwrap()],
+        );
     } else {
         transform.translation += cast_dir * cast_dist;
     }
+    transform.translation += move_and_slide.depenetrate(
+        state.collider(),
+        transform.rotation,
+        transform.translation,
+        &ctx.cfg.filter,
+        &ctx.cfg.move_and_slide,
+    );
 
     // non-Quake code incoming: if we
     // - didn't really step up
@@ -534,7 +552,7 @@ fn accelerate(
     wish_speed: f32,
     velocity: Vec3,
     acceleration_hz: f32,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
 ) -> Vec3 {
     let current_speed = velocity.dot(wish_dir.into());
     let add_speed = wish_speed - current_speed;
@@ -543,7 +561,7 @@ fn accelerate(
     }
 
     let accel_speed = f32::min(
-        acceleration_hz * collide_and_slide.time.delta_secs() * wish_speed,
+        acceleration_hz * move_and_slide.time.delta_secs() * wish_speed,
         add_speed,
     );
     velocity + accel_speed * wish_dir
@@ -552,7 +570,7 @@ fn accelerate(
 fn friction(
     mut velocity: Vec3,
     state: &CharacterControllerState,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     ctx: &Ctx,
 ) -> Vec3 {
     let mut vec = velocity;
@@ -568,7 +586,7 @@ fn friction(
     }
     let drop = if state.walking {
         let stop_speed = f32::max(speed, ctx.cfg.stop_speed);
-        stop_speed * ctx.cfg.friction_hz * collide_and_slide.time.delta_secs()
+        stop_speed * ctx.cfg.friction_hz * move_and_slide.time.delta_secs()
     } else {
         0.0
     };
@@ -579,7 +597,7 @@ fn friction(
 
 fn check_duck(
     transform: Transform,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
     ctx: &Ctx,
 ) {
@@ -588,7 +606,7 @@ fn check_duck(
     } else if state.crouching {
         // try to stand up
         state.crouching = false;
-        let is_intersecting = is_intersecting(transform, state, collide_and_slide, ctx);
+        let is_intersecting = is_intersecting(transform, state, move_and_slide, ctx);
         state.crouching = is_intersecting;
     }
 }
@@ -596,13 +614,13 @@ fn check_duck(
 fn ground_trace(
     transform: Transform,
     velocity: Vec3,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
     ctx: &Ctx,
 ) {
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = ctx.cfg.ground_distance;
-    let trace = collide_and_slide.query_pipeline.cast_shape(
+    let trace = move_and_slide.query_pipeline.cast_shape(
         state.collider(),
         transform.translation,
         transform.rotation,
@@ -681,10 +699,10 @@ fn cmd_scale(ctx: &Ctx) -> f32 {
 fn is_intersecting(
     transform: Transform,
     state: &CharacterControllerState,
-    collide_and_slide: &CollideAndSlide,
+    move_and_slide: &MoveAndSlide,
     ctx: &Ctx,
 ) -> bool {
-    !collide_and_slide
+    !move_and_slide
         .intersections(
             state.collider(),
             transform.rotation,
