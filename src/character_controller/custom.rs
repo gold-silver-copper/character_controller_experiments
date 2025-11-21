@@ -43,6 +43,7 @@ pub(crate) struct CharacterController {
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
     pub(crate) speed: f32,
+    pub(crate) air_speed: f32,
     pub(crate) move_and_slide: MoveAndSlideConfig,
 }
 
@@ -65,6 +66,7 @@ impl Default for CharacterController {
             jump_speed: 14.3,
             crouch_scale: 0.25,
             speed: 18.0,
+            air_speed: 5.0,
             move_and_slide: MoveAndSlideConfig {
                 skin_width: 0.003,
                 ..default()
@@ -312,13 +314,7 @@ fn walk_move(
         wish_speed = f32::min(wish_speed, ctx.cfg.speed * ctx.cfg.crouch_scale);
     }
 
-    velocity = accelerate(
-        wish_dir,
-        wish_speed,
-        velocity,
-        ctx.cfg.acceleration_hz,
-        move_and_slide,
-    );
+    velocity = accelerate(wish_dir, wish_speed, velocity, move_and_slide, ctx);
 
     let acceleration_speed = velocity.length();
 
@@ -373,13 +369,7 @@ fn air_move(
     wish_speed *= scale;
 
     // not on ground, so little effect on velocity
-    velocity = accelerate(
-        wish_dir,
-        wish_speed,
-        velocity,
-        ctx.cfg.air_acceleration_hz,
-        move_and_slide,
-    );
+    velocity = air_accelerate(wish_dir, wish_speed, velocity, move_and_slide, ctx);
 
     // we may have a ground plane that is very steep, even
     // though we don't have a groundentity
@@ -546,8 +536,8 @@ fn accelerate(
     wish_dir: Dir3,
     wish_speed: f32,
     velocity: Vec3,
-    acceleration_hz: f32,
     move_and_slide: &MoveAndSlide,
+    ctx: &Ctx,
 ) -> Vec3 {
     let current_speed = velocity.dot(wish_dir.into());
     let add_speed = wish_speed - current_speed;
@@ -556,7 +546,31 @@ fn accelerate(
     }
 
     let accel_speed = f32::min(
-        acceleration_hz * move_and_slide.time.delta_secs() * wish_speed,
+        ctx.cfg.acceleration_hz * move_and_slide.time.delta_secs() * wish_speed,
+        add_speed,
+    );
+    velocity + accel_speed * wish_dir
+}
+
+#[must_use]
+fn air_accelerate(
+    wish_dir: Dir3,
+    wish_speed: f32,
+    velocity: Vec3,
+    move_and_slide: &MoveAndSlide,
+    ctx: &Ctx,
+) -> Vec3 {
+    let current_speed = velocity.dot(wish_dir.into());
+    // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
+    // our current velocity, making `add_speed` large.
+    let air_wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
+    let add_speed = air_wish_speed - current_speed;
+    if add_speed <= 0.0 {
+        return velocity;
+    }
+
+    let accel_speed = f32::min(
+        ctx.cfg.acceleration_hz * move_and_slide.time.delta_secs() * wish_speed,
         add_speed,
     );
     velocity + accel_speed * wish_dir
