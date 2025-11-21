@@ -6,7 +6,7 @@ use bevy::{
     pbr::Atmosphere,
     prelude::*,
     scene::SceneInstanceReady,
-    window::{WindowMode, WindowResolution},
+    window::WindowResolution,
 };
 use bevy_enhanced_input::prelude::*;
 use bevy_trenchbroom::prelude::*;
