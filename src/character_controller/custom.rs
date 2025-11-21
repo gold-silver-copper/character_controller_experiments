@@ -37,13 +37,12 @@ pub(crate) struct CharacterController {
     pub(crate) stop_speed: f32,
     pub(crate) friction_hz: f32,
     pub(crate) acceleration_hz: f32,
-    pub(crate) air_acceleration_hz: f32,
     pub(crate) gravity: f32,
     pub(crate) step_size: f32,
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
     pub(crate) speed: f32,
-    pub(crate) air_speed: f32,
+    pub(crate) max_air_speed: f32,
     pub(crate) move_and_slide: MoveAndSlideConfig,
 }
 
@@ -60,13 +59,12 @@ impl Default for CharacterController {
             stop_speed: 5.0,
             friction_hz: 8.0,
             acceleration_hz: 12.0,
-            air_acceleration_hz: 1.5,
             gravity: 50.0,
             step_size: 1.0,
             jump_speed: 14.3,
             crouch_scale: 0.25,
             speed: 18.0,
-            air_speed: 2.0,
+            max_air_speed: 2.0,
             move_and_slide: MoveAndSlideConfig {
                 skin_width: 0.003,
                 ..default()
@@ -563,7 +561,7 @@ fn air_accelerate(
     let current_speed = velocity.dot(wish_dir.into());
     // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
     // our current velocity, making `add_speed` large.
-    let air_wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
+    let air_wish_speed = f32::min(wish_speed, ctx.cfg.max_air_speed);
     let add_speed = air_wish_speed - current_speed;
     if add_speed <= 0.0 {
         return velocity;
