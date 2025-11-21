@@ -1,4 +1,4 @@
-use avian3d::prelude::{ColliderAabb, CollidingEntities, LinearVelocity};
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use crate::{
@@ -19,22 +19,15 @@ fn setup(mut commands: Commands) {
 fn update_debug_text(
     mut text: Single<&mut Text, With<DebugText>>,
     kcc: Single<
-        (
-            &CharacterControllerState,
-            &LinearVelocity,
-            &ColliderAabb,
-            &CollidingEntities,
-        ),
+        (&CharacterControllerState, &ColliderAabb, &CollidingEntities),
         With<CharacterController>,
     >,
     camera: Single<&Transform, With<Camera>>,
     names: Query<NameOrEntity>,
 ) {
-    let (state, velocity, aabb, collisions) = kcc.into_inner();
-    let velocity = velocity.0;
+    let (state, aabb, collisions) = kcc.into_inner();
+    let velocity = state.velocity;
     let speed = velocity.length();
-    let wish_velocity = state.velocity;
-    let wish_speed = wish_velocity.length();
     let camera_position = camera.translation;
     let collisions = names
         .iter_many(collisions.iter())
@@ -45,13 +38,10 @@ fn update_debug_text(
         })
         .collect::<Vec<_>>();
     text.0 = format!(
-        "Speed: {speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]\nWish Speed: {wish_speed:.3}\nWish Velocity: [{:.3}, {:.3}, {:.3}]\nCamera Position: [{:.3}, {:.3}, {:.3}]\nCollider Aabb:\n  min:[{:.3}, {:.3}, {:.3}]\n  max:[{:.3}, {:.3}, {:.3}]\nCollisions: {:#?}",
+        "Speed: {speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]\nCamera Position: [{:.3}, {:.3}, {:.3}]\nCollider Aabb:\n  min:[{:.3}, {:.3}, {:.3}]\n  max:[{:.3}, {:.3}, {:.3}]\nCollisions: {:#?}",
         velocity.x,
         velocity.y,
         velocity.z,
-        wish_velocity.x,
-        wish_velocity.y,
-        wish_velocity.z,
         camera_position.x,
         camera_position.y,
         camera_position.z,
