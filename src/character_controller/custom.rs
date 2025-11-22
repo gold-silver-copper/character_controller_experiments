@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use avian3d::{
+    character_controller::move_and_slide::MoveHitData,
     parry::shape::{Capsule, SharedShape},
     prelude::*,
 };
@@ -136,8 +137,8 @@ pub(crate) struct CharacterControllerState {
     pub(crate) standing_collider: Collider,
     #[reflect(ignore)]
     pub(crate) crouching_collider: Collider,
-    pub(crate) previous_grounded: Option<ShapeHitData>,
-    pub(crate) grounded: Option<ShapeHitData>,
+    pub(crate) previous_grounded: Option<MoveHitData>,
+    pub(crate) grounded: Option<MoveHitData>,
     pub(crate) crouching: bool,
     pub(crate) ground_plane: bool,
     pub(crate) grounded_entity: Option<Entity>,
@@ -650,12 +651,12 @@ fn ground_trace(
 ) {
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = ctx.cfg.ground_distance;
-    let trace = move_and_slide.query_pipeline.cast_shape(
+    let trace = move_and_slide.cast_move(
         state.collider(),
         transform.translation,
         transform.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_dist),
+        cast_dir * cast_dist,
+        ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
     state.previous_grounded = state.grounded;
