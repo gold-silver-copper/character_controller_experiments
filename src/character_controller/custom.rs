@@ -43,7 +43,7 @@ pub(crate) struct CharacterController {
     pub(crate) jump_speed: f32,
     pub(crate) crouch_scale: f32,
     pub(crate) speed: f32,
-    pub(crate) max_air_speed: f32,
+    pub(crate) air_speed: f32,
     pub(crate) move_and_slide: MoveAndSlideConfig,
 }
 
@@ -65,7 +65,7 @@ impl Default for CharacterController {
             jump_speed: 14.3,
             crouch_scale: 0.25,
             speed: 18.0,
-            max_air_speed: 1.0,
+            air_speed: 1.0,
             move_and_slide: MoveAndSlideConfig {
                 skin_width: 0.003,
                 ..default()
@@ -247,10 +247,12 @@ fn move_single(
 
     ground_trace(transform, velocity, &move_and_slide, &mut state, &ctx);
 
+    let wish_velocity = calculate_wish_velocity(&state, &ctx);
     (transform, velocity) = if state.walking {
         walk_move(
             transform,
             velocity,
+            wish_velocity,
             delta_time,
             &move_and_slide,
             &mut state,
@@ -260,6 +262,7 @@ fn move_single(
         air_move(
             transform,
             velocity,
+            wish_velocity,
             delta_time,
             &move_and_slide,
             &mut state,
@@ -273,6 +276,36 @@ fn move_single(
     state.velocity = velocity;
 
     (transform.translation, state)
+}
+
+fn calculate_wish_velocity(state: &CharacterControllerState, ctx: &Ctx) -> Vec3 {
+    let movement = ctx.input.last_movement.unwrap_or_default();
+    let mut forward = Vec3::from(ctx.orientation.forward());
+    forward.y = 0.0;
+    forward = forward.normalize_or_zero();
+    if let Some(grounded) = state.grounded {
+        forward = MoveAndSlide::project_velocity(forward, &[grounded.normal1.try_into().unwrap()]);
+    }
+    forward.y = 0.0;
+    forward = forward.normalize_or_zero();
+    let mut right = Vec3::from(ctx.orientation.right());
+    right.y = 0.0;
+    if let Some(grounded) = state.grounded {
+        right = MoveAndSlide::project_velocity(right, &[grounded.normal1.try_into().unwrap()]);
+    }
+    right.y = 0.0;
+    right = right.normalize_or_zero();
+
+    let wish_vel = movement.y * forward + movement.x * right;
+    let wish_dir = wish_vel.normalize_or_zero();
+
+    // clamp the speed lower if ducking
+    let speed = if state.crouching {
+        ctx.cfg.speed * ctx.cfg.crouch_scale
+    } else {
+        ctx.cfg.speed
+    };
+    wish_dir * speed
 }
 
 fn dejitter_output(original_transform: Transform, mut transform: Transform) -> Transform {
@@ -292,6 +325,7 @@ fn dejitter_output(original_transform: Transform, mut transform: Transform) -> T
 fn walk_move(
     transform: Transform,
     mut velocity: Vec3,
+    wish_velocity: Vec3,
     delta_time: Duration,
     move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
@@ -300,38 +334,20 @@ fn walk_move(
     let jumped: bool;
     (velocity, jumped) = check_jump(velocity, state, ctx);
     if jumped {
-        return air_move(transform, velocity, delta_time, move_and_slide, state, ctx);
+        return air_move(
+            transform,
+            velocity,
+            wish_velocity,
+            delta_time,
+            move_and_slide,
+            state,
+            ctx,
+        );
     }
 
     velocity = friction(velocity, delta_time, state, ctx);
 
-    let movement = ctx.input.last_movement.unwrap_or_default();
-    let mut forward = Vec3::from(ctx.orientation.forward());
-    forward.y = 0.0;
-    if let Some(grounded) = state.grounded {
-        forward = MoveAndSlide::project_velocity(forward, &[grounded.normal1.try_into().unwrap()]);
-    }
-    forward = forward.normalize_or_zero();
-    let mut right = Vec3::from(ctx.orientation.right());
-    right.y = 0.0;
-    if let Some(grounded) = state.grounded {
-        right = MoveAndSlide::project_velocity(right, &[grounded.normal1.try_into().unwrap()]);
-    }
-    right = right.normalize_or_zero();
-
-    let wish_vel = movement.y * forward + movement.x * right;
-    // when going up or down slopes the wish velocity should not be zero
-    // So even if it seems like a good idea, do not do the following:
-    // wish_vel.y = 0.0;
-    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
-    wish_speed *= ctx.cfg.speed;
-
-    // clamp the speed lower if ducking
-    if state.crouching {
-        wish_speed = f32::min(wish_speed, ctx.cfg.speed * ctx.cfg.crouch_scale);
-    }
-
-    velocity = accelerate(wish_dir, wish_speed, velocity, delta_time, ctx);
+    velocity = accelerate(velocity, wish_velocity, delta_time, ctx);
 
     let acceleration_speed = velocity.length();
 
@@ -366,6 +382,7 @@ fn check_jump(mut velocity: Vec3, state: &mut CharacterControllerState, ctx: &Ct
 fn air_move(
     transform: Transform,
     mut velocity: Vec3,
+    wish_velocity: Vec3,
     delta_time: Duration,
     move_and_slide: &MoveAndSlide,
     state: &mut CharacterControllerState,
@@ -373,21 +390,8 @@ fn air_move(
 ) -> (Transform, Vec3) {
     velocity = friction(velocity, delta_time, state, ctx);
 
-    let movement = ctx.input.last_movement.unwrap_or_default();
-    let mut forward = Vec3::from(ctx.orientation.forward());
-    forward.y = 0.0;
-    forward = forward.normalize_or_zero();
-    let mut right = Vec3::from(ctx.orientation.right());
-    right.y = 0.0;
-    right = right.normalize_or_zero();
-
-    let mut wish_vel = movement.y * forward + movement.x * right;
-    wish_vel.y = 0.0;
-    let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
-    wish_speed *= ctx.cfg.speed;
-
     // not on ground, so little effect on velocity
-    velocity = air_accelerate(wish_dir, wish_speed, velocity, delta_time, ctx);
+    velocity = air_accelerate(velocity, wish_velocity, delta_time, ctx);
     velocity += Vec3::NEG_Y * ctx.cfg.gravity * delta_time.as_secs_f32();
 
     // we may have a ground plane that is very steep, even
@@ -566,13 +570,8 @@ fn step_slide_move(
 }
 
 #[must_use]
-fn accelerate(
-    wish_dir: Dir3,
-    wish_speed: f32,
-    velocity: Vec3,
-    delta_time: Duration,
-    ctx: &Ctx,
-) -> Vec3 {
+fn accelerate(velocity: Vec3, wish_velocity: Vec3, delta_time: Duration, ctx: &Ctx) -> Vec3 {
+    let (wish_dir, wish_speed) = Dir3::new_and_length(wish_velocity).unwrap_or((Dir3::NEG_Z, 0.0));
     let current_speed = velocity.dot(wish_dir.into());
     let add_speed = wish_speed - current_speed;
     if add_speed <= 0.0 {
@@ -587,17 +586,12 @@ fn accelerate(
 }
 
 #[must_use]
-fn air_accelerate(
-    wish_dir: Dir3,
-    wish_speed: f32,
-    velocity: Vec3,
-    delta_time: Duration,
-    ctx: &Ctx,
-) -> Vec3 {
+fn air_accelerate(velocity: Vec3, wish_velocity: Vec3, delta_time: Duration, ctx: &Ctx) -> Vec3 {
+    let (wish_dir, wish_speed) = Dir3::new_and_length(wish_velocity).unwrap_or((Dir3::NEG_Z, 0.0));
     let current_speed = velocity.dot(wish_dir.into());
     // right here is where air strafing happens: `current_speed` is close to 0 when we want to move perpendicular to
     // our current velocity, making `add_speed` large.
-    let air_wish_speed = f32::min(wish_speed, ctx.cfg.max_air_speed);
+    let air_wish_speed = f32::min(wish_speed, ctx.cfg.air_speed);
     let add_speed = air_wish_speed - current_speed;
     if add_speed <= 0.0 {
         return velocity;

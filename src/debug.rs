@@ -21,6 +21,7 @@ fn update_debug_text(
     let (state, aabb) = kcc.into_inner();
     let velocity = state.velocity;
     let speed = velocity.length();
+    let horizontal_speed = velocity.xz().length();
     let camera_position = camera.translation;
     let collisions = names
         .iter_many(state.touching_entities.iter())
@@ -39,7 +40,7 @@ fn update_debug_text(
                 .unwrap_or(format!("{}", name.entity))
         });
     text.0 = format!(
-        "Speed: {speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]\nCamera Position: [{:.3}, {:.3}, {:.3}]\nCollider Aabb:\n  min:[{:.3}, {:.3}, {:.3}]\n  max:[{:.3}, {:.3}, {:.3}]\nCollisions: {:#?}\nGround: {:?}",
+        "Speed: {speed:.3}\nHorizontal Speed: {horizontal_speed:.3}\nVelocity: [{:.3}, {:.3}, {:.3}]\nCamera Position: [{:.3}, {:.3}, {:.3}]\nCollider Aabb:\n  min:[{:.3}, {:.3}, {:.3}]\n  max:[{:.3}, {:.3}, {:.3}]\nCollisions: {:#?}\nGround: {:?}",
         velocity.x,
         velocity.y,
         velocity.z,

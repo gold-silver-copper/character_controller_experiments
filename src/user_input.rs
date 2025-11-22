@@ -27,7 +27,6 @@ impl PlayerInput {
                 (
                     Action::<Movement>::new(),
                     DeadZone::default(),
-                    SmoothNudge::default(),
                     Bindings::spawn((
                         Cardinal::wasd_keys(),
                         Axial::left_stick()
