@@ -668,7 +668,6 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = false;
         state.walking = false;
-        info!("a");
         return;
     };
 
@@ -678,7 +677,6 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = false;
         state.walking = false;
-        info!("b");
         return;
     }
 
@@ -687,7 +685,6 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = true;
         state.walking = false;
-        info!("c");
         return;
     }
 
