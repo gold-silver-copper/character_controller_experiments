@@ -286,14 +286,12 @@ fn calculate_wish_velocity(state: &CharacterControllerState, ctx: &Ctx) -> Vec3 
     if let Some(grounded) = state.grounded {
         forward = MoveAndSlide::project_velocity(forward, &[grounded.normal1.try_into().unwrap()]);
     }
-    forward.y = 0.0;
     forward = forward.normalize_or_zero();
     let mut right = Vec3::from(ctx.orientation.right());
     right.y = 0.0;
     if let Some(grounded) = state.grounded {
         right = MoveAndSlide::project_velocity(right, &[grounded.normal1.try_into().unwrap()]);
     }
-    right.y = 0.0;
     right = right.normalize_or_zero();
 
     let wish_vel = movement.y * forward + movement.x * right;
