@@ -420,12 +420,12 @@ fn step_slide_move(
 
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = ctx.cfg.step_size;
-    let trace = move_and_slide.query_pipeline.cast_shape(
+    let trace = move_and_slide.cast_move(
         state.collider(),
         start_o.translation,
         start_o.rotation,
-        cast_dir,
-        &ShapeCastConfig::from_max_distance(cast_dist),
+        cast_dir * cast_dist,
+        ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
 
