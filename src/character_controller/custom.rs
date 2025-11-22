@@ -412,8 +412,7 @@ fn step_slide_move(
 
     // Non-Quake: also don't step in the air
     if !clipped || !state.walking {
-        // we got exactly where we wanted to go first try
-        info!(?transform, ?velocity);
+        // we got exactly where we wanted to go first try);
         return (transform, velocity);
     }
     let direct_transform = transform;
@@ -434,13 +433,12 @@ fn step_slide_move(
     if velocity.y > 0.0
         && (trace.is_none() || trace.is_some_and(|t| t.normal1.dot(Vec3::Y) < ctx.cfg.min_walk_cos))
     {
-        info!("b");
         return (transform, velocity);
     }
 
     let cast_dir = Dir3::Y;
     // test the player position if they were a stepheight higher
-    let sweep_hit = move_and_slide.cast_move(
+    let trace = move_and_slide.cast_move(
         state.collider(),
         start_o.translation,
         start_o.rotation,
@@ -448,13 +446,12 @@ fn step_slide_move(
         ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
-    let step_size = if let Some(sweep_hit) = sweep_hit {
-        sweep_hit.distance
+    let step_size = if let Some(trace) = trace {
+        trace.distance
     } else {
         cast_dist
     };
     if step_size <= 0.0 {
-        info!("c");
         // can't step up
         return (transform, velocity);
     }
@@ -500,7 +497,7 @@ fn step_slide_move(
     // push down the final amount
     let cast_dir = Dir3::NEG_Y;
     let cast_dist = step_size;
-    let sweep_hit = move_and_slide.cast_move(
+    let trace = move_and_slide.cast_move(
         state.collider(),
         transform.translation,
         transform.rotation,
@@ -508,9 +505,9 @@ fn step_slide_move(
         ctx.cfg.move_and_slide.skin_width,
         &ctx.cfg.filter,
     );
-    if let Some(sweep_hit) = sweep_hit {
-        transform.translation += cast_dir * sweep_hit.distance;
-        velocity = MoveAndSlide::clip_velocity(velocity, &[sweep_hit.normal1.try_into().unwrap()]);
+    if let Some(trace) = trace {
+        transform.translation += cast_dir * trace.distance;
+        velocity = MoveAndSlide::clip_velocity(velocity, &[trace.normal1.try_into().unwrap()]);
     } else {
         transform.translation += cast_dir * cast_dist;
     }
@@ -549,10 +546,8 @@ fn step_slide_move(
 
     if did_not_advance_through_stepping || trace.is_some_and(|t| t.normal1.y < ctx.cfg.min_walk_cos)
     {
-        info!("d");
         (direct_transform, direct_velocity)
     } else {
-        info!("e");
         (transform, velocity)
     }
 }
