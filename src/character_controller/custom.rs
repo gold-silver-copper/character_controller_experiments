@@ -304,7 +304,6 @@ fn walk_move(
     }
 
     velocity = friction(velocity, delta_time, state, ctx);
-    let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
     let mut forward = Vec3::from(ctx.orientation.forward());
@@ -325,7 +324,7 @@ fn walk_move(
     // So even if it seems like a good idea, do not do the following:
     // wish_vel.y = 0.0;
     let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
-    wish_speed *= scale;
+    wish_speed *= ctx.cfg.speed;
 
     // clamp the speed lower if ducking
     if state.crouching {
@@ -373,7 +372,6 @@ fn air_move(
     ctx: &Ctx,
 ) -> (Transform, Vec3) {
     velocity = friction(velocity, delta_time, state, ctx);
-    let scale = cmd_scale(ctx);
 
     let movement = ctx.input.last_movement.unwrap_or_default();
     let mut forward = Vec3::from(ctx.orientation.forward());
@@ -386,7 +384,7 @@ fn air_move(
     let mut wish_vel = movement.y * forward + movement.x * right;
     wish_vel.y = 0.0;
     let (wish_dir, mut wish_speed) = Dir3::new_and_length(wish_vel).unwrap_or((Dir3::NEG_Z, 0.0));
-    wish_speed *= scale;
+    wish_speed *= ctx.cfg.speed;
 
     // not on ground, so little effect on velocity
     velocity = air_accelerate(wish_dir, wish_speed, velocity, delta_time, ctx);
@@ -725,19 +723,6 @@ fn crash_land() {
     //   - deal damage
     //   - play anims
     //   - reset bob cycle
-}
-
-#[must_use]
-fn cmd_scale(ctx: &Ctx) -> f32 {
-    let Some(mov) = ctx.input.last_movement else {
-        return 0.0;
-    };
-    let max = f32::max(mov.x.abs(), mov.y.abs());
-    if max == 0.0 {
-        return 0.0;
-    }
-    let total = mov.length();
-    ctx.cfg.speed * max / total
 }
 
 #[must_use]
