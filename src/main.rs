@@ -156,7 +156,7 @@ fn reset_player(
     spawner: Single<&Transform, (With<SpawnPlayer>, Without<Player>)>,
 ) {
     let (mut transform, mut state) = player.into_inner();
-    if transform.translation.y < -25.0 {
+    if transform.translation.y < -50.0 {
         state.velocity.y = 0.0;
         transform.translation = spawner.translation;
     }
