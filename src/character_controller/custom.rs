@@ -54,7 +54,7 @@ impl Default for CharacterController {
             filter: SpatialQueryFilter::default(),
             standing_view_height: 1.7,
             crouch_view_height: 1.2,
-            ground_distance: 0.015,
+            ground_distance: 0.02,
             jump_detection_speed: 0.5,
             min_walk_cos: 0.766,
             stop_speed: 5.0,
@@ -66,7 +66,10 @@ impl Default for CharacterController {
             crouch_scale: 0.3,
             speed: 14.0,
             air_speed: 1.0,
-            move_and_slide: MoveAndSlideConfig::default(),
+            move_and_slide: MoveAndSlideConfig {
+                skin_width: 0.01,
+                ..default()
+            },
         }
     }
 }
@@ -665,6 +668,7 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = false;
         state.walking = false;
+        info!("a");
         return;
     };
 
@@ -674,6 +678,7 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = false;
         state.walking = false;
+        info!("b");
         return;
     }
 
@@ -682,6 +687,7 @@ fn ground_trace(
         state.grounded_entity = None;
         state.ground_plane = true;
         state.walking = false;
+        info!("c");
         return;
     }
 
