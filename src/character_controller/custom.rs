@@ -63,7 +63,7 @@ impl Default for CharacterController {
             gravity: 36.0,
             step_size: 1.0,
             jump_speed: 12.0,
-            crouch_scale: 0.25,
+            crouch_scale: 0.3,
             speed: 14.0,
             air_speed: 1.0,
             move_and_slide: MoveAndSlideConfig::default(),
@@ -344,15 +344,11 @@ fn walk_move(
 
     velocity = accelerate(velocity, wish_velocity, delta_time, ctx);
 
-    let speed = velocity.length();
-
     if let Some(grounded) = state.grounded {
         velocity =
             MoveAndSlide::project_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
     }
 
-    // don't decrease velocity when going up or down a slope
-    velocity = velocity.normalize_or_zero() * speed;
     // don't do anything if standing still
     if velocity.xz() == Vec2::ZERO {
         return (transform, velocity);
@@ -392,14 +388,12 @@ fn air_move(
     // we may have a ground plane that is very steep, even
     // though we don't have a groundentity
     // slide along the steep plane
-    let speed = velocity.length();
     if state.ground_plane
         && let Some(grounded) = state.grounded
     {
         velocity =
             MoveAndSlide::project_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
     }
-    velocity = velocity.normalize_or_zero() * speed;
     step_slide_move(transform, velocity, delta_time, move_and_slide, state, ctx)
 }
 
@@ -530,9 +524,7 @@ fn step_slide_move(
     );
     if let Some(trace) = trace {
         transform.translation += cast_dir * trace.distance;
-        let speed = velocity.length();
         velocity = MoveAndSlide::project_velocity(velocity, &[trace.normal1.try_into().unwrap()]);
-        velocity = velocity.normalize_or_zero() * speed;
     } else {
         transform.translation += cast_dir * cast_dist;
     }
