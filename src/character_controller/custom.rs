@@ -323,10 +323,6 @@ fn walk_move(
         velocity =
             MoveAndSlide::project_velocity(velocity, &[grounded.normal1.try_into().unwrap()]);
     }
-    // Set vertical speed to zero when on ground.
-    // In theory, `friction` already does this for us, but `project_velocity` introduces small errors
-    // along the way, which make the velocity slightly positive when standing on ground.
-    velocity.y = 0.0;
 
     // don't decrease velocity when going up or down a slope
     velocity = velocity.normalize_or_zero() * acceleration_speed;
