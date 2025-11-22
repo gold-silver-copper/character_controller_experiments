@@ -396,18 +396,29 @@ fn step_slide_move(
     let start_v = velocity;
 
     let mut clipped = false;
+    let move_and_slide_cfg = if let Some(grounded) = state.grounded {
+        let mut cfg = ctx.cfg.move_and_slide.clone();
+        cfg.planes.push(Dir3::new_unchecked(grounded.normal1));
+        cfg
+    } else {
+        ctx.cfg.move_and_slide.clone()
+    };
+    let mut direct_collisions = EntityHashSet::new();
     let result = move_and_slide.move_and_slide(
         state.collider(),
         transform.translation,
         transform.rotation,
         velocity,
-        &ctx.cfg.move_and_slide,
+        &move_and_slide_cfg,
         &ctx.cfg.filter,
-        |_| {
+        |hit| {
             clipped = true;
+            direct_collisions.insert(hit.entity);
             true
         },
     );
+    state.touching_entities = direct_collisions;
+
     transform.translation = result.position;
     velocity = result.clipped_velocity;
 
@@ -478,20 +489,19 @@ fn step_slide_move(
         MoveAndSlide::depenetrate(&((&ctx.cfg.move_and_slide).into()), &intersections);
     velocity = start_v;
 
-    let mut touching = std::mem::take(&mut state.touching_entities);
+    let mut step_collisions = EntityHashSet::new();
     let result = move_and_slide.move_and_slide(
         state.collider(),
         transform.translation,
         transform.rotation,
         velocity,
-        &ctx.cfg.move_and_slide,
+        &move_and_slide_cfg,
         &ctx.cfg.filter,
         |hit| {
-            touching.insert(hit.entity);
+            step_collisions.insert(hit.entity);
             true
         },
     );
-    std::mem::swap(&mut state.touching_entities, &mut touching);
     transform.translation = result.position;
     velocity = result.clipped_velocity;
 
@@ -549,6 +559,7 @@ fn step_slide_move(
     {
         (direct_transform, direct_velocity)
     } else {
+        state.touching_entities = step_collisions;
         (transform, velocity)
     }
 }
