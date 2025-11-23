@@ -59,7 +59,7 @@ impl Default for CharacterController {
             min_walk_cos: 0.766,
             stop_speed: 5.0,
             friction_hz: 10.0,
-            acceleration_hz: 12.0,
+            acceleration_hz: 100.0,
             gravity: 36.0,
             step_size: 1.0,
             jump_speed: 12.0,
