@@ -1061,6 +1061,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef8e4b7e61dfe7719bb03c884dc270cd46a82efb40f93e9933b990c5c190c59"
 
 [[package]]
+name = "bevy_mod_mipmap_generator"
+version = "0.1.0"
+source = "git+https://github.com/DGriffin91/bevy_mod_mipmap_generator#6b9cd4a4e63bc088f9b8b4a5c1d2310b07df6fb9"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "futures-lite",
+ "image",
+]
+
+[[package]]
 name = "bevy_pbr"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1886,6 +1897,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy_enhanced_input",
+ "bevy_mod_mipmap_generator",
  "bevy_trenchbroom",
  "bevy_trenchbroom_avian",
 ]
@@ -3093,6 +3105,8 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -6546,4 +6560,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "zune-core"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.4.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
+dependencies = [
+ "zune-core",
 ]
