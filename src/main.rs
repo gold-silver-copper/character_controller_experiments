@@ -2,6 +2,7 @@ use avian3d::prelude::*;
 use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     gltf::GltfPlugin,
+    light::CascadeShadowConfigBuilder,
     log::{LogPlugin, tracing_subscriber::field::MakeExt},
     pbr::Atmosphere,
     prelude::*,
@@ -9,6 +10,7 @@ use bevy::{
     window::WindowResolution,
 };
 use bevy_enhanced_input::prelude::*;
+use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_trenchbroom::prelude::*;
 use bevy_trenchbroom_avian::AvianPhysicsBackend;
 
@@ -16,7 +18,7 @@ use crate::{
     character_controller::{
         CharacterController, CharacterControllerCameraOf, CharacterControllerState,
     },
-    user_input::PlayerInput,
+    user_input::{PlayerInput, Reset},
 };
 
 mod camera;
@@ -68,6 +70,7 @@ fn main() -> AppExit {
                 }),
             PhysicsPlugins::default(),
             EnhancedInputPlugin,
+            MipmapGeneratorPlugin,
             TrenchBroomPlugins(
                 TrenchBroomConfig::new("character_controller_experiment")
                     .default_solid_spawn_hooks(|| {
@@ -86,6 +89,8 @@ fn main() -> AppExit {
         ))
         .add_systems(Startup, setup)
         .add_systems(FixedPreUpdate, reset_player)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
+        .add_observer(reset_player_on_input)
         .run()
 }
 
@@ -106,6 +111,19 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             ..default()
         }),
         Atmosphere::EARTH,
+    ));
+    commands.spawn((
+        Transform::from_xyz(0.0, 1.0, 0.0).looking_at(vec3(1.0, -2.0, -2.0), Vec3::Y),
+        DirectionalLight {
+            shadows_enabled: true,
+            ..default()
+        },
+        CascadeShadowConfigBuilder {
+            maximum_distance: 500.0,
+            overlap_proportion: 0.5,
+            ..default()
+        }
+        .build(),
     ));
 }
 
@@ -160,6 +178,16 @@ fn reset_player(
         state.velocity.y = 0.0;
         transform.translation = spawner.translation;
     }
+}
+
+fn reset_player_on_input(
+    _fire: On<Fire<Reset>>,
+    player: Single<(&mut Transform, &mut CharacterControllerState), With<Player>>,
+    spawner: Single<&Transform, (With<SpawnPlayer>, Without<Player>)>,
+) {
+    let (mut transform, mut state) = player.into_inner();
+    state.velocity.y = 0.0;
+    transform.translation = spawner.translation;
 }
 
 fn tweak_materials(

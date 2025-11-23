@@ -2,7 +2,7 @@ use bevy::{
     ecs::{lifecycle::HookContext, world::DeferredWorld},
     prelude::*,
 };
-use bevy_enhanced_input::prelude::*;
+use bevy_enhanced_input::prelude::{Release, *};
 
 use crate::character_controller::{Crouch, Jump, Movement};
 
@@ -17,6 +17,10 @@ pub(crate) struct PlayerInput;
 #[derive(Debug, InputAction)]
 #[action_output(Vec2)]
 pub(crate) struct Rotate;
+
+#[derive(Debug, InputAction)]
+#[action_output(Vec2)]
+pub(crate) struct Reset;
 
 impl PlayerInput {
     fn on_add(mut world: DeferredWorld, ctx: HookContext) {
@@ -39,6 +43,11 @@ impl PlayerInput {
                 (
                     Action::<Crouch>::new(),
                     bindings![KeyCode::ControlLeft, GamepadButton::LeftTrigger],
+                ),
+                (
+                    Action::<Reset>::new(),
+                    bindings![KeyCode::KeyR, GamepadButton::Select],
+                    Release::default(),
                 ),
                 (Action::<Rotate>::new(),Negate::all(), Scale::splat(0.1),
                     Bindings::spawn((Spawn(Binding::mouse_motion()), Axial::right_stick()))),
